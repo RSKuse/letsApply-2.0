@@ -1,0 +1,65 @@
+//
+//  Job.swift
+//  letsApply
+//
+
+import Foundation
+
+struct Job: Codable {
+    let id: String?
+    let title: String
+    let companyName: String
+    let location: Location
+    let jobType: String
+    let remote: Bool
+    let description: String
+    let qualifications: [String]
+    let responsibilities: [String]
+    let requirements: [String]
+    let experience: Experience
+    let compensation: Compensation
+    let application: Application
+    let jobCategory: String
+    let postingDate: String
+    let visibility: Visibility
+    let promoted: [String]?
+
+    var isFeatured: Bool {
+        return visibility.featured
+    }
+}
+
+struct Location: Codable {
+    let city: String
+    let region: String
+    let country: String
+}
+
+struct Experience: Codable {
+    let minYears: Int
+    let preferredYears: Int
+    let details: String
+}
+
+struct Compensation: Codable {
+    let salaryRange: SalaryRange
+    let benefits: [String]
+}
+
+struct SalaryRange: Codable {
+    let min: Int
+    let max: Int
+    let currency: String
+}
+
+struct Application: Codable {
+    let deadline: String
+    let applicationUrl: String
+    let applicationEmail: String
+    let contactPhone: String
+}
+
+struct Visibility: Codable {
+    let featured: Bool
+    let promoted: Bool
+}
