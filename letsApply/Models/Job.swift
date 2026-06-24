@@ -4,11 +4,13 @@
 //
 
 import Foundation
+import FirebaseFirestore
 
 struct Job: Codable {
     let id: String?
     let title: String
     let companyName: String
+    let companyImageName: String?
     let location: Location
     let jobType: String
     let remote: Bool
@@ -26,6 +28,20 @@ struct Job: Codable {
 
     var isFeatured: Bool {
         return visibility.featured
+    }
+
+    var isPromoted: Bool {
+        return visibility.promoted
+    }
+
+    var salaryText: String {
+        "\(compensation.salaryRange.currency) \(compensation.salaryRange.min) to \(compensation.salaryRange.max)"
+    }
+
+    var locationText: String {
+        [location.city, location.region, location.country]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
     }
 }
 
