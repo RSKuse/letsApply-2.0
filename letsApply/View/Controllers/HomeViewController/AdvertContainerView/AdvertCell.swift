@@ -3,7 +3,54 @@
 //  letsApply
 //
 
+
 import UIKit
+
+class AdvertCell: UICollectionViewCell {
+
+    static let reuseIdentifier = "AdvertCellID"
+
+    lazy var bannerImageView: UIImageView = {
+        let imageView = UIImageView()
+        imageView.image = UIImage(named: "advert_banner")
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 22
+        imageView.backgroundColor = .systemGreen
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        return imageView
+    }()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setupUI() {
+        contentView.addSubview(bannerImageView)
+
+        bannerImageView.topAnchor.constraint(equalTo: contentView.topAnchor).isActive = true
+        bannerImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20).isActive = true
+        bannerImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20).isActive = true
+        bannerImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor).isActive = true
+
+    }
+}
+
+
+
+
+
+
+
+
+
+
+/*import UIKit
 
 class AdvertCell: UICollectionViewCell {
 
@@ -55,4 +102,4 @@ class AdvertCell: UICollectionViewCell {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-}
+}*/
