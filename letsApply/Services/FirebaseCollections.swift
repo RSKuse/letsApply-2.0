@@ -10,4 +10,6 @@ import Foundation
 enum FirebaseCollections: String {
     case users
     case jobs
+    case applications
+    case savedJobs
 }

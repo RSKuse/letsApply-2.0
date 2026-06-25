@@ -17,19 +17,32 @@ struct UserProfile: Codable {
     var experience: String
     var education: String
     var savedJobs: [String]
+    var isPremium: Bool
+
+    var isComplete: Bool {
+        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !jobTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !skills.isEmpty &&
+        !qualifications.isEmpty &&
+        !experience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !education.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     enum CodingKeys: String, CodingKey {
         case uid
         case name
         case email
         case location
-        case profilePictureUrl = "profile_picture_url"
-        case jobTitle = "job_title"
+        case profilePictureUrl
+        case jobTitle
         case skills
         case qualifications
         case experience
         case education
-        case savedJobs = "saved_jobs"
+        case savedJobs
+        case isPremium
     }
 
     init(
@@ -43,7 +56,8 @@ struct UserProfile: Codable {
         qualifications: [String] = [],
         experience: String = "",
         education: String = "",
-        savedJobs: [String] = []
+        savedJobs: [String] = [],
+        isPremium: Bool = false
     ) {
         self.uid = uid
         self.name = name
@@ -56,5 +70,6 @@ struct UserProfile: Codable {
         self.experience = experience
         self.education = education
         self.savedJobs = savedJobs
+        self.isPremium = isPremium
     }
 }

@@ -9,9 +9,9 @@ import Foundation
 import FirebaseAuth
 
 enum AuthenticationState {
-    case signUp
+    case onboarding
     case profileSetup
-    case joblistingScreen
+    case mainApp
 }
 
 class SplashViewModel {
@@ -19,28 +19,24 @@ class SplashViewModel {
     func checkAuthentication(completion: @escaping (AuthenticationState) -> Void) {
         
         guard let user = Auth.auth().currentUser else {
-            return completion(.signUp)
+            completion(.onboarding)
+            return
         }
-        
-        // Fetch user profile to determine next screen
-        FirestoreService().fetchUserProfile(uid: user.uid) { [weak self] result in
+
+        if user.isAnonymous {
+            completion(.mainApp)
+            return
+        }
+
+        FirestoreService().fetchUserProfile(uid: user.uid) { result in
             DispatchQueue.main.async {
-                guard let self else { return }
                 switch result {
                 case .success(let profile):
-                    if profile.skills.isEmpty || profile.location.isEmpty {
-                        // Show ProfileSetupViewController if profile is incomplete
-                        completion(.profileSetup)
-                    } else {
-                        // Show MainTabBarController if profile is complete
-                        completion(.joblistingScreen)
-                    }
+                    completion(profile.isComplete ? .mainApp : .profileSetup)
                 case .failure:
-                    // Default to SignInViewController on error
-                    completion(.signUp)
+                    completion(.profileSetup)
                 }
             }
-            
         }
     }
 }

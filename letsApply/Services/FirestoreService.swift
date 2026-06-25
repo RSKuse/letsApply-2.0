@@ -29,7 +29,8 @@ class FirestoreService {
             UserProfile.CodingKeys.qualifications.rawValue: profile.qualifications,
             UserProfile.CodingKeys.experience.rawValue: profile.experience,
             UserProfile.CodingKeys.education.rawValue: profile.education,
-            UserProfile.CodingKeys.savedJobs.rawValue: profile.savedJobs
+            UserProfile.CodingKeys.savedJobs.rawValue: profile.savedJobs,
+            UserProfile.CodingKeys.isPremium.rawValue: profile.isPremium
         ]
 
         if let profilePictureUrl = profile.profilePictureUrl {
@@ -54,7 +55,8 @@ class FirestoreService {
                 qualifications: [],
                 experience: "",
                 education: "",
-                savedJobs: []
+                savedJobs: [],
+                isPremium: false
             )))
             return
         }
@@ -80,7 +82,8 @@ class FirestoreService {
                         qualifications: [],
                         experience: "",
                         education: "",
-                        savedJobs: []
+                        savedJobs: [],
+                        isPremium: false
                     )))
                     return
                 }
@@ -125,13 +128,14 @@ class FirestoreService {
             name: data[UserProfile.CodingKeys.name.rawValue] as? String ?? "Guest User",
             email: data[UserProfile.CodingKeys.email.rawValue] as? String ?? "",
             location: data[UserProfile.CodingKeys.location.rawValue] as? String ?? "South Africa",
-            profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String,
-            jobTitle: data[UserProfile.CodingKeys.jobTitle.rawValue] as? String ?? "",
+            profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String ?? data["profile_picture_url"] as? String,
+            jobTitle: data[UserProfile.CodingKeys.jobTitle.rawValue] as? String ?? data["job_title"] as? String ?? "",
             skills: data[UserProfile.CodingKeys.skills.rawValue] as? [String] ?? [],
             qualifications: data[UserProfile.CodingKeys.qualifications.rawValue] as? [String] ?? [],
             experience: data[UserProfile.CodingKeys.experience.rawValue] as? String ?? "",
             education: data[UserProfile.CodingKeys.education.rawValue] as? String ?? "",
-            savedJobs: data[UserProfile.CodingKeys.savedJobs.rawValue] as? [String] ?? []
+            savedJobs: data[UserProfile.CodingKeys.savedJobs.rawValue] as? [String] ?? data["saved_jobs"] as? [String] ?? [],
+            isPremium: data[UserProfile.CodingKeys.isPremium.rawValue] as? Bool ?? false
         )
     }
 
@@ -172,7 +176,7 @@ class FirestoreService {
             benefits: compensationData["benefits"] as? [String] ?? data["benefits"] as? [String] ?? []
         )
 
-        let application = Application(
+        let application = JobApplicationInfo(
             deadline: applicationData["deadline"] as? String ?? data["applicationDeadline"] as? String ?? "Open until filled",
             applicationUrl: applicationData["applicationUrl"] as? String ?? data["applicationUrl"] as? String ?? "",
             applicationEmail: applicationData["applicationEmail"] as? String ?? data["applicationEmail"] as? String ?? "",
@@ -225,7 +229,7 @@ class FirestoreService {
                     salaryRange: SalaryRange(min: 18000, max: 30000, currency: "ZAR"),
                     benefits: ["Remote", "Mentorship"]
                 ),
-                application: Application(deadline: "Open", applicationUrl: "", applicationEmail: "careers@letsapply.co.za", contactPhone: ""),
+                application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "careers@letsapply.co.za", contactPhone: ""),
                 jobCategory: "Technology",
                 postingDate: "2026-06-07",
                 visibility: Visibility(featured: true, promoted: true),
@@ -248,7 +252,7 @@ class FirestoreService {
                     salaryRange: SalaryRange(min: 22000, max: 35000, currency: "ZAR"),
                     benefits: []
                 ),
-                application: Application(deadline: "Open", applicationUrl: "", applicationEmail: "applications@example.org", contactPhone: ""),
+                application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "applications@example.org", contactPhone: ""),
                 jobCategory: "Research",
                 postingDate: "2026-06-07",
                 visibility: Visibility(featured: true, promoted: false),
@@ -271,13 +275,235 @@ class FirestoreService {
                     salaryRange: SalaryRange(min: 25000, max: 38000, currency: "ZAR"),
                     benefits: []
                 ),
-                application: Application(deadline: "Open", applicationUrl: "", applicationEmail: "hr@example.ac.za", contactPhone: ""),
+                application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "hr@example.ac.za", contactPhone: ""),
                 jobCategory: "Administration",
                 postingDate: "2026-06-07",
                 visibility: Visibility(featured: false, promoted: false),
                 promoted: nil
             )
         ]
+    }
+
+    func createApplication(
+        userProfile: UserProfile,
+        job: Job,
+        completion: @escaping (Result<Application, Error>) -> Void
+    ) {
+        guard let jobId = job.id, !jobId.isEmpty else {
+            completion(.failure(NSError(
+                domain: "ApplicationError",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "This job is missing an ID."]
+            )))
+            return
+        }
+
+        let applicationId = makeUserJobDocumentId(userId: userProfile.uid, jobId: jobId)
+        let document = db.collection(FirebaseCollections.applications.rawValue).document(applicationId)
+
+        document.getDocument { snapshot, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            if snapshot?.exists == true {
+                completion(.failure(NSError(
+                    domain: "ApplicationError",
+                    code: 409,
+                    userInfo: [NSLocalizedDescriptionKey: "You have already applied for this job."]
+                )))
+                return
+            }
+
+            let application = Application(
+                id: applicationId,
+                userId: userProfile.uid,
+                jobId: jobId,
+                jobTitle: job.title,
+                companyName: job.companyName,
+                appliedDate: Self.currentDateString(),
+                status: "submitted",
+                cvUrl: nil,
+                coverLetterText: nil,
+                isAIGenerated: false
+            )
+
+            document.setData(self.mapApplicationData(application)) { error in
+                if let error = error {
+                    completion(.failure(error))
+                } else {
+                    completion(.success(application))
+                }
+            }
+        }
+    }
+
+    func hasApplied(userId: String, jobId: String, completion: @escaping (Bool) -> Void) {
+        let applicationId = makeUserJobDocumentId(userId: userId, jobId: jobId)
+        db.collection(FirebaseCollections.applications.rawValue)
+            .document(applicationId)
+            .getDocument { snapshot, _ in
+                completion(snapshot?.exists == true)
+            }
+    }
+
+    func fetchApplications(userId: String, completion: @escaping (Result<[Application], Error>) -> Void) {
+        db.collection(FirebaseCollections.applications.rawValue)
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+
+                let applications = snapshot?.documents.map {
+                    self.mapApplication(from: $0.data(), documentId: $0.documentID)
+                } ?? []
+                completion(.success(applications))
+            }
+    }
+
+    func saveJob(userId: String, job: Job, completion: @escaping (Error?) -> Void) {
+        guard let jobId = job.id, !jobId.isEmpty else {
+            completion(NSError(
+                domain: "SavedJobError",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "This job is missing an ID."]
+            ))
+            return
+        }
+
+        let savedJobId = makeUserJobDocumentId(userId: userId, jobId: jobId)
+        let savedJob = SavedJob(
+            id: savedJobId,
+            userId: userId,
+            jobId: jobId,
+            jobTitle: job.title,
+            companyName: job.companyName,
+            savedDate: Self.currentDateString()
+        )
+
+        let batch = db.batch()
+        let savedRef = db.collection(FirebaseCollections.savedJobs.rawValue).document(savedJobId)
+        let userRef = db.collection(FirebaseCollections.users.rawValue).document(userId)
+
+        batch.setData(mapSavedJobData(savedJob), forDocument: savedRef)
+        batch.setData([
+            UserProfile.CodingKeys.savedJobs.rawValue: FieldValue.arrayUnion([jobId])
+        ], forDocument: userRef, merge: true)
+
+        batch.commit(completion: completion)
+    }
+
+    func removeSavedJob(userId: String, jobId: String, completion: @escaping (Error?) -> Void) {
+        let savedJobId = makeUserJobDocumentId(userId: userId, jobId: jobId)
+        let batch = db.batch()
+        let savedRef = db.collection(FirebaseCollections.savedJobs.rawValue).document(savedJobId)
+        let userRef = db.collection(FirebaseCollections.users.rawValue).document(userId)
+
+        batch.deleteDocument(savedRef)
+        batch.setData([
+            UserProfile.CodingKeys.savedJobs.rawValue: FieldValue.arrayRemove([jobId])
+        ], forDocument: userRef, merge: true)
+
+        batch.commit(completion: completion)
+    }
+
+    func isJobSaved(userId: String, jobId: String, completion: @escaping (Bool) -> Void) {
+        let savedJobId = makeUserJobDocumentId(userId: userId, jobId: jobId)
+        db.collection(FirebaseCollections.savedJobs.rawValue)
+            .document(savedJobId)
+            .getDocument { snapshot, _ in
+                completion(snapshot?.exists == true)
+            }
+    }
+
+    func fetchSavedJobs(userId: String, completion: @escaping (Result<[SavedJob], Error>) -> Void) {
+        db.collection(FirebaseCollections.savedJobs.rawValue)
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+
+                let savedJobs = snapshot?.documents.map {
+                    self.mapSavedJob(from: $0.data(), documentId: $0.documentID)
+                } ?? []
+                completion(.success(savedJobs))
+            }
+    }
+
+    private func makeUserJobDocumentId(userId: String, jobId: String) -> String {
+        return "\(userId)_\(jobId)"
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private func mapApplicationData(_ application: Application) -> [String: Any] {
+        var data: [String: Any] = [
+            "id": application.id,
+            "userId": application.userId,
+            "jobId": application.jobId,
+            "jobTitle": application.jobTitle,
+            "companyName": application.companyName,
+            "appliedDate": application.appliedDate,
+            "status": application.status,
+            "isAIGenerated": application.isAIGenerated ?? false
+        ]
+
+        if let cvUrl = application.cvUrl {
+            data["cvUrl"] = cvUrl
+        }
+
+        if let coverLetterText = application.coverLetterText {
+            data["coverLetterText"] = coverLetterText
+        }
+
+        return data
+    }
+
+    private func mapApplication(from data: [String: Any], documentId: String) -> Application {
+        return Application(
+            id: data["id"] as? String ?? documentId,
+            userId: data["userId"] as? String ?? "",
+            jobId: data["jobId"] as? String ?? "",
+            jobTitle: data["jobTitle"] as? String ?? "",
+            companyName: data["companyName"] as? String ?? "",
+            appliedDate: data["appliedDate"] as? String ?? "",
+            status: data["status"] as? String ?? "submitted",
+            cvUrl: data["cvUrl"] as? String,
+            coverLetterText: data["coverLetterText"] as? String,
+            isAIGenerated: data["isAIGenerated"] as? Bool
+        )
+    }
+
+    private func mapSavedJobData(_ savedJob: SavedJob) -> [String: Any] {
+        return [
+            "id": savedJob.id,
+            "userId": savedJob.userId,
+            "jobId": savedJob.jobId,
+            "jobTitle": savedJob.jobTitle,
+            "companyName": savedJob.companyName,
+            "savedDate": savedJob.savedDate
+        ]
+    }
+
+    private func mapSavedJob(from data: [String: Any], documentId: String) -> SavedJob {
+        return SavedJob(
+            id: data["id"] as? String ?? documentId,
+            userId: data["userId"] as? String ?? "",
+            jobId: data["jobId"] as? String ?? "",
+            jobTitle: data["jobTitle"] as? String ?? "",
+            companyName: data["companyName"] as? String ?? "",
+            savedDate: data["savedDate"] as? String ?? ""
+        )
+    }
+
+    private static func currentDateString() -> String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: Date())
     }
 
     func uploadProfileImage(uid: String, image: UIImage, completion: @escaping (Result<String, Error>) -> Void) {
