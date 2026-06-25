@@ -35,7 +35,11 @@ struct Job: Codable {
     }
 
     var salaryText: String {
-        "\(compensation.salaryRange.currency) \(compensation.salaryRange.min) to \(compensation.salaryRange.max)"
+        if compensation.salaryRange.min == 0 && compensation.salaryRange.max == 0 {
+            return "Salary not disclosed"
+        }
+
+        return "\(compensation.salaryRange.currency) \(compensation.salaryRange.min) to \(compensation.salaryRange.max)"
     }
 
     var locationText: String {

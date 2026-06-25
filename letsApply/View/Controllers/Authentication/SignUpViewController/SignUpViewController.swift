@@ -158,6 +158,7 @@ class SignUpViewController: UIViewController {
                     if let error = error {
                         self.showAlert(title: "Profile Save Failed", message: error.localizedDescription)
                     } else {
+                        OnboardingState.markCompleted()
                         AppRouter.showProfileSetup()
                     }
                 }

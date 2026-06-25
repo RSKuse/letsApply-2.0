@@ -17,6 +17,11 @@ enum AuthenticationState {
 class SplashViewModel {
     
     func checkAuthentication(completion: @escaping (AuthenticationState) -> Void) {
+
+        guard OnboardingState.hasCompletedOnboarding else {
+            completion(.onboarding)
+            return
+        }
         
         guard let user = Auth.auth().currentUser else {
             completion(.onboarding)

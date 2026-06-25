@@ -17,7 +17,7 @@ class ApplicationsViewController: UIViewController {
         tableView.delegate = self
         tableView.separatorStyle = .none
         tableView.backgroundColor = .systemBackground
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ApplicationCell")
+        tableView.register(ApplicationTableViewCell.self, forCellReuseIdentifier: ApplicationTableViewCell.reuseIdentifier)
         tableView.translatesAutoresizingMaskIntoConstraints = false
         return tableView
     }()
@@ -46,6 +46,12 @@ class ApplicationsViewController: UIViewController {
         super.viewDidLoad()
         title = "Applications"
         view.backgroundColor = .systemBackground
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "arrow.clockwise"),
+            style: .plain,
+            target: self,
+            action: #selector(refreshTapped)
+        )
         setupUI()
         fetchApplications()
     }
@@ -84,6 +90,10 @@ class ApplicationsViewController: UIViewController {
         }
     }
 
+    @objc private func refreshTapped() {
+        fetchApplications()
+    }
+
     private func showAlert(title: String, message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -98,20 +108,13 @@ extension ApplicationsViewController: UITableViewDataSource, UITableViewDelegate
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 96
+        return 136
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ApplicationCell", for: indexPath)
+        let cell = tableView.dequeueReusableCell(withIdentifier: ApplicationTableViewCell.reuseIdentifier, for: indexPath) as! ApplicationTableViewCell
         let application = applications[indexPath.row]
-        var content = cell.defaultContentConfiguration()
-        content.text = application.jobTitle
-        content.secondaryText = "\(application.companyName) - \(application.status.capitalized)"
-        content.image = UIImage(systemName: "paperplane.fill")
-        content.imageProperties.tintColor = .systemGreen
-        cell.contentConfiguration = content
-        cell.selectionStyle = .none
-        cell.backgroundColor = .systemBackground
+        cell.configure(with: application)
         return cell
     }
 }

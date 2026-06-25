@@ -17,7 +17,7 @@ class SavedJobsViewController: UIViewController {
         tableView.delegate = self
         tableView.separatorStyle = .none
         tableView.backgroundColor = .systemBackground
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SavedJobCell")
+        tableView.register(SavedJobTableViewCell.self, forCellReuseIdentifier: SavedJobTableViewCell.reuseIdentifier)
         tableView.translatesAutoresizingMaskIntoConstraints = false
         return tableView
     }()
@@ -46,6 +46,12 @@ class SavedJobsViewController: UIViewController {
         super.viewDidLoad()
         title = "Saved Jobs"
         view.backgroundColor = .systemBackground
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "arrow.clockwise"),
+            style: .plain,
+            target: self,
+            action: #selector(refreshTapped)
+        )
         setupUI()
         fetchSavedJobs()
     }
@@ -84,6 +90,10 @@ class SavedJobsViewController: UIViewController {
         }
     }
 
+    @objc private func refreshTapped() {
+        fetchSavedJobs()
+    }
+
     private func showAlert(title: String, message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -98,20 +108,58 @@ extension SavedJobsViewController: UITableViewDataSource, UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 96
+        return 120
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "SavedJobCell", for: indexPath)
+        let cell = tableView.dequeueReusableCell(withIdentifier: SavedJobTableViewCell.reuseIdentifier, for: indexPath) as! SavedJobTableViewCell
         let savedJob = savedJobs[indexPath.row]
-        var content = cell.defaultContentConfiguration()
-        content.text = savedJob.jobTitle
-        content.secondaryText = savedJob.companyName
-        content.image = UIImage(systemName: "bookmark.fill")
-        content.imageProperties.tintColor = .systemGreen
-        cell.contentConfiguration = content
-        cell.selectionStyle = .none
-        cell.backgroundColor = .systemBackground
+        cell.configure(with: savedJob)
         return cell
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let savedJob = savedJobs[indexPath.row]
+        firestoreService.fetchJob(jobId: savedJob.jobId) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let job):
+                    let detailsVC = JobDetailsViewController(job: job)
+                    detailsVC.hidesBottomBarWhenPushed = true
+                    self?.navigationController?.pushViewController(detailsVC, animated: true)
+                case .failure(let error):
+                    self?.showAlert(title: "Job Not Found", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        let savedJob = savedJobs[indexPath.row]
+        let remove = UIContextualAction(style: .destructive, title: "Remove") { [weak self] _, _, completion in
+            guard let self = self else {
+                completion(false)
+                return
+            }
+
+            self.firestoreService.removeSavedJob(userId: self.userId, jobId: savedJob.jobId) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        self.showAlert(title: "Remove Failed", message: error.localizedDescription)
+                        completion(false)
+                    } else {
+                        self.savedJobs.remove(at: indexPath.row)
+                        tableView.deleteRows(at: [indexPath], with: .automatic)
+                        self.emptyLabel.isHidden = !self.savedJobs.isEmpty
+                        completion(true)
+                    }
+                }
+            }
+        }
+
+        return UISwipeActionsConfiguration(actions: [remove])
     }
 }

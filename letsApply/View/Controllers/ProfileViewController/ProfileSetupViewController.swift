@@ -5,12 +5,14 @@
 
 import UIKit
 import FirebaseAuth
+import UniformTypeIdentifiers
 
 class ProfileViewController: UIViewController {
 
     var isProfileSetupMode = false
 
     private let firestoreService = FirestoreService()
+    private let imagePickerService = ImagePickerService()
     private var currentProfile = UserProfile()
 
     private lazy var scrollView: UIScrollView = {
@@ -24,14 +26,18 @@ class ProfileViewController: UIViewController {
         let stackView = UIStackView(arrangedSubviews: [
             headerView,
             statsStackView,
+            completionCardView,
             nameTextField,
             emailTextField,
             locationTextField,
             jobTitleTextField,
+            professionalSummaryTextView,
             skillsTextField,
             qualificationsTextField,
             experienceTextField,
             educationTextField,
+            cvStatusLabel,
+            uploadCVButton,
             cvButton,
             applicationsButton,
             savedJobsButton,
@@ -84,6 +90,33 @@ class ProfileViewController: UIViewController {
         return label
     }()
 
+    private lazy var completionCardView: UIView = {
+        let view = UIView()
+        view.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.10)
+        view.layer.cornerRadius = 16
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private lazy var completionStatusLabel: UILabel = {
+        let label = UILabel()
+        label.text = "Profile 0% complete"
+        label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        label.textColor = .label
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var completionMissingLabel: UILabel = {
+        let label = UILabel()
+        label.text = "Add your details to unlock applications."
+        label.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
     private lazy var applicationsStatLabel = makeStatLabel(title: "Applications", value: "0")
     private lazy var savedJobsStatLabel = makeStatLabel(title: "Saved Jobs", value: "0")
     private lazy var premiumStatLabel = makeStatLabel(title: "Plan", value: "Free")
@@ -104,10 +137,26 @@ class ProfileViewController: UIViewController {
     private lazy var emailTextField = makeTextField(placeholder: "Email", keyboardType: .emailAddress)
     private lazy var locationTextField = makeTextField(placeholder: "Location")
     private lazy var jobTitleTextField = makeTextField(placeholder: "Desired job title")
+    private lazy var professionalSummaryTextView = makeTextView(placeholder: "Professional summary")
     private lazy var skillsTextField = makeTextField(placeholder: "Skills comma separated")
     private lazy var qualificationsTextField = makeTextField(placeholder: "Qualifications comma separated")
     private lazy var experienceTextField = makeTextField(placeholder: "Experience")
     private lazy var educationTextField = makeTextField(placeholder: "Education")
+
+    private lazy var cvStatusLabel: UILabel = {
+        let label = UILabel()
+        label.text = "No CV uploaded yet"
+        label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 0
+        return label
+    }()
+
+    private lazy var uploadCVButton: UIButton = {
+        let button = makeSecondaryButton(title: "Upload CV PDF")
+        button.addTarget(self, action: #selector(uploadCVTapped), for: .touchUpInside)
+        return button
+    }()
 
     private lazy var cvButton: UIButton = {
         let button = makeSecondaryButton(title: "CV Builder")
@@ -160,6 +209,7 @@ class ProfileViewController: UIViewController {
         super.viewDidLoad()
         title = isProfileSetupMode ? "Complete Profile" : "Profile"
         view.backgroundColor = .systemBackground
+        imagePickerService.delegate = self
         setupUI()
         fetchProfileData()
     }
@@ -176,6 +226,12 @@ class ProfileViewController: UIViewController {
         headerView.addSubview(profileImageView)
         headerView.addSubview(headerNameLabel)
         headerView.addSubview(headerSubtitleLabel)
+        completionCardView.addSubview(completionStatusLabel)
+        completionCardView.addSubview(completionMissingLabel)
+
+        let imageTapGesture = UITapGestureRecognizer(target: self, action: #selector(changeProfilePhotoTapped))
+        profileImageView.isUserInteractionEnabled = true
+        profileImageView.addGestureRecognizer(imageTapGesture)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -204,8 +260,18 @@ class ProfileViewController: UIViewController {
             headerSubtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: headerView.bottomAnchor, constant: -18),
             headerView.heightAnchor.constraint(greaterThanOrEqualToConstant: 118),
 
+            completionStatusLabel.topAnchor.constraint(equalTo: completionCardView.topAnchor, constant: 16),
+            completionStatusLabel.leadingAnchor.constraint(equalTo: completionCardView.leadingAnchor, constant: 16),
+            completionStatusLabel.trailingAnchor.constraint(equalTo: completionCardView.trailingAnchor, constant: -16),
+
+            completionMissingLabel.topAnchor.constraint(equalTo: completionStatusLabel.bottomAnchor, constant: 8),
+            completionMissingLabel.leadingAnchor.constraint(equalTo: completionStatusLabel.leadingAnchor),
+            completionMissingLabel.trailingAnchor.constraint(equalTo: completionStatusLabel.trailingAnchor),
+            completionMissingLabel.bottomAnchor.constraint(equalTo: completionCardView.bottomAnchor, constant: -16),
+
             saveButton.heightAnchor.constraint(equalToConstant: 52),
             createProfileButton.heightAnchor.constraint(equalToConstant: 48),
+            uploadCVButton.heightAnchor.constraint(equalToConstant: 48),
             cvButton.heightAnchor.constraint(equalToConstant: 48),
             applicationsButton.heightAnchor.constraint(equalToConstant: 48),
             savedJobsButton.heightAnchor.constraint(equalToConstant: 48),
@@ -225,6 +291,21 @@ class ProfileViewController: UIViewController {
         textField.layer.borderWidth = 1
         textField.heightAnchor.constraint(equalToConstant: 50).isActive = true
         return textField
+    }
+
+    private func makeTextView(placeholder: String) -> UITextView {
+        let textView = UITextView()
+        textView.text = placeholder
+        textView.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+        textView.textColor = .secondaryLabel
+        textView.backgroundColor = .secondarySystemBackground
+        textView.layer.cornerRadius = 10
+        textView.layer.borderColor = UIColor.systemGray5.cgColor
+        textView.layer.borderWidth = 1
+        textView.textContainerInset = UIEdgeInsets(top: 12, left: 10, bottom: 12, right: 10)
+        textView.delegate = self
+        textView.heightAnchor.constraint(equalToConstant: 110).isActive = true
+        return textView
     }
 
     private func makeSecondaryButton(title: String) -> UIButton {
@@ -285,6 +366,9 @@ class ProfileViewController: UIViewController {
             email: "",
             location: "South Africa",
             profilePictureUrl: nil,
+            cvUrl: nil,
+            cvFileName: nil,
+            professionalSummary: "",
             jobTitle: "",
             skills: [],
             qualifications: [],
@@ -307,14 +391,40 @@ class ProfileViewController: UIViewController {
         emailTextField.text = profile.email.isEmpty ? FirebaseAuthenticationService.shared.currentUserEmail : profile.email
         locationTextField.text = profile.location
         jobTitleTextField.text = profile.jobTitle
+        professionalSummaryTextView.text = profile.professionalSummary.isEmpty ? "Professional summary" : profile.professionalSummary
+        professionalSummaryTextView.textColor = profile.professionalSummary.isEmpty ? .secondaryLabel : .label
         skillsTextField.text = profile.skills.joined(separator: ", ")
         qualificationsTextField.text = profile.qualifications.joined(separator: ", ")
         experienceTextField.text = profile.experience
         educationTextField.text = profile.education
         premiumStatLabel.text = "\(profile.isPremium ? "Premium" : "Free")\nPlan"
+        cvStatusLabel.text = profile.cvFileName.map { "CV uploaded: \($0)" } ?? "No CV uploaded yet"
+        updateCompletionUI(profile)
+
+        if let profilePictureUrl = profile.profilePictureUrl {
+            ProfilePictureService.shared.fetchProfilePicture(urlString: profilePictureUrl) { [weak self] image in
+                self?.profileImageView.image = image ?? UIImage(systemName: "person.circle.fill")
+            }
+        } else {
+            profileImageView.image = UIImage(systemName: "person.circle.fill")
+        }
 
         saveButton.isHidden = false
         createProfileButton.isHidden = true
+    }
+
+    private func updateCompletionUI(_ profile: UserProfile) {
+        completionStatusLabel.text = "Profile \(profile.completionPercentage)% complete"
+
+        if profile.isComplete {
+            completionCardView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+            completionMissingLabel.text = profile.cvUrl == nil
+            ? "You can apply now. Uploading a CV will make each application stronger."
+            : "Ready to apply. Your CV will be attached to new applications."
+        } else {
+            completionCardView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.12)
+            completionMissingLabel.text = "Missing: \(profile.missingRequiredFields.joined(separator: ", "))"
+        }
     }
 
     private func fetchProfileStats() {
@@ -360,6 +470,9 @@ class ProfileViewController: UIViewController {
             email: emailTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? user.email ?? "",
             location: locationTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             profilePictureUrl: currentProfile.profilePictureUrl,
+            cvUrl: currentProfile.cvUrl,
+            cvFileName: currentProfile.cvFileName,
+            professionalSummary: professionalSummaryText(),
             jobTitle: jobTitleTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             skills: parseList(skillsTextField.text),
             qualifications: parseList(qualificationsTextField.text),
@@ -388,6 +501,32 @@ class ProfileViewController: UIViewController {
                 self.showAlert(title: "Profile Saved", message: message)
             }
         }
+    }
+
+    private func professionalSummaryText() -> String {
+        let text = professionalSummaryTextView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text == "Professional summary" ? "" : text
+    }
+
+    @objc private func changeProfilePhotoTapped() {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else {
+            showRegistrationPrompt()
+            return
+        }
+
+        imagePickerService.presentImagePicker(from: self)
+    }
+
+    @objc private func uploadCVTapped() {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else {
+            showRegistrationPrompt()
+            return
+        }
+
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.pdf], asCopy: true)
+        documentPicker.delegate = self
+        documentPicker.allowsMultipleSelection = false
+        present(documentPicker, animated: true)
     }
 
     @objc private func openCVBuilder() {
@@ -451,5 +590,82 @@ class ProfileViewController: UIViewController {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+extension ProfileViewController: UITextViewDelegate {
+
+    func textViewDidBeginEditing(_ textView: UITextView) {
+        if textView.text == "Professional summary" {
+            textView.text = ""
+            textView.textColor = .label
+        }
+    }
+
+    func textViewDidEndEditing(_ textView: UITextView) {
+        if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            textView.text = "Professional summary"
+            textView.textColor = .secondaryLabel
+        }
+    }
+}
+
+extension ProfileViewController: ImagePickerDelegate {
+
+    func didSelectImage(_ image: UIImage) {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else { return }
+
+        profileImageView.image = image
+        ProfilePictureService.shared.uploadProfilePicture(uid: user.uid, image: image) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+
+                switch result {
+                case .success(let url):
+                    self.currentProfile.profilePictureUrl = url
+                    self.saveProfile()
+                case .failure(let error):
+                    self.showAlert(title: "Photo Upload Failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+}
+
+extension ProfileViewController: UIDocumentPickerDelegate {
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous, let fileURL = urls.first else { return }
+
+        uploadCVButton.isEnabled = false
+        uploadCVButton.setTitle("Uploading CV...", for: .normal)
+
+        firestoreService.uploadCVDocument(uid: user.uid, fileURL: fileURL) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.uploadCVButton.isEnabled = true
+                self.uploadCVButton.setTitle("Upload CV PDF", for: .normal)
+
+                switch result {
+                case .success(let upload):
+                    self.firestoreService.updateUserCV(uid: user.uid, cvUrl: upload.url, cvFileName: upload.fileName) { error in
+                        DispatchQueue.main.async {
+                            if let error = error {
+                                self.showAlert(title: "CV Save Failed", message: error.localizedDescription)
+                                return
+                            }
+
+                            self.currentProfile.cvUrl = upload.url
+                            self.currentProfile.cvFileName = upload.fileName
+                            self.cvStatusLabel.text = "CV uploaded: \(upload.fileName)"
+                            self.updateCompletionUI(self.currentProfile)
+                            self.showAlert(title: "CV Uploaded", message: "Your CV will attach to new job applications.")
+                        }
+                    }
+                case .failure(let error):
+                    self.showAlert(title: "CV Upload Failed", message: error.localizedDescription)
+                }
+            }
+        }
     }
 }

@@ -7,18 +7,16 @@
 
 import Foundation
 import UIKit
-import FirebaseFirestore
 import FirebaseAuth
 
 class ProfileViewModel {
     
-    private let db = Firestore.firestore()
-    
+    private let firestoreService = FirestoreService()
     
     func fetchUserProfile(completion: @escaping (UserProfile) -> Void) {
         guard let userUID = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
         
-        FirestoreService().fetchUserProfile(uid: userUID) { result in
+        firestoreService.fetchUserProfile(uid: userUID) { result in
             switch result {
             case .success(let profile):
                 completion(profile)
@@ -29,16 +27,7 @@ class ProfileViewModel {
     }
     
     func saveUserProfile(_ profile: UserProfile) {
-        guard let userUID = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
-        
-        let data: [String: Any] = [
-            "name": profile.name,
-            "email": profile.email,
-            "skills": profile.skills,
-            "location": profile.location
-        ]
-        
-        db.collection("users").document(userUID).setData(data) { error in
+        firestoreService.saveUserProfile(profile) { error in
             if let error = error {
                 print("Error saving profile: \(error.localizedDescription)")
             } else {

@@ -26,12 +26,7 @@ final class AppRouter {
     }
 
     static func setRootViewController(_ viewController: UIViewController) {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first else {
-            UIApplication.shared.windows.first?.rootViewController = viewController
-            UIApplication.shared.windows.first?.makeKeyAndVisible()
-            return
-        }
+        guard let window = activeWindow() else { return }
 
         window.rootViewController = viewController
         window.makeKeyAndVisible()
@@ -42,5 +37,12 @@ final class AppRouter {
             options: .transitionCrossDissolve,
             animations: nil
         )
+    }
+
+    private static func activeWindow() -> UIWindow? {
+        return UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
     }
 }

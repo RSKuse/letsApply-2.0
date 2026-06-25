@@ -120,6 +120,7 @@ class SignInViewController: UIViewController {
 
                 switch result {
                 case .success(let profile):
+                    OnboardingState.markCompleted()
                     if profile.isComplete {
                         AppRouter.showMainApp()
                     } else {

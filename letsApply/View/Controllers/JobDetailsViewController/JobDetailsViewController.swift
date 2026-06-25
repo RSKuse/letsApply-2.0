@@ -12,6 +12,7 @@ class JobDetailsViewController: UIViewController {
     private let firestoreService = FirestoreService()
     private var currentProfile: UserProfile?
     private var isSaved = false
+    private var hasApplied = false
 
     private lazy var scrollView: UIScrollView = {
         let scrollView = UIScrollView()
@@ -144,6 +145,7 @@ class JobDetailsViewController: UIViewController {
         configure()
         fetchProfileState()
         fetchSavedState()
+        fetchApplicationState()
     }
 
     private func setupNavigationBar() {
@@ -232,6 +234,34 @@ class JobDetailsViewController: UIViewController {
                 self?.isSaved = saved
                 self?.updateSavedButton()
             }
+        }
+    }
+
+    private func fetchApplicationState() {
+        guard let user = Auth.auth().currentUser,
+              !user.isAnonymous,
+              let jobId = job.id else {
+            updateApplyButton()
+            return
+        }
+
+        firestoreService.hasApplied(userId: user.uid, jobId: jobId) { [weak self] applied in
+            DispatchQueue.main.async {
+                self?.hasApplied = applied
+                self?.updateApplyButton()
+            }
+        }
+    }
+
+    private func updateApplyButton() {
+        if hasApplied {
+            applyButton.setTitle("Application Submitted", for: .normal)
+            applyButton.backgroundColor = .systemGray
+            applyButton.isEnabled = false
+        } else {
+            applyButton.setTitle("Apply Now", for: .normal)
+            applyButton.backgroundColor = .systemGreen
+            applyButton.isEnabled = true
         }
     }
 
@@ -333,6 +363,12 @@ class JobDetailsViewController: UIViewController {
                         self.showProfileCompletionPrompt()
                         return
                     }
+
+                    guard profile.cvUrl != nil else {
+                        self.showMissingCVPrompt(profile: profile)
+                        return
+                    }
+
                     self.submitApplication(profile: profile)
                 case .failure(let error):
                     self.showAlert(title: "Profile Error", message: error.localizedDescription)
@@ -351,6 +387,8 @@ class JobDetailsViewController: UIViewController {
 
                 switch result {
                 case .success:
+                    self.hasApplied = true
+                    self.updateApplyButton()
                     self.showAlert(title: "Application Submitted", message: "Your application for \(self.job.title) has been submitted.")
                 case .failure(let error):
                     self.showAlert(title: "Application Not Submitted", message: error.localizedDescription)
@@ -422,6 +460,24 @@ class JobDetailsViewController: UIViewController {
         let alert = UIAlertController(title: "Create Profile", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Register", style: .default) { [weak self] _ in
             self?.navigationController?.pushViewController(SignUpViewController(), animated: true)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showMissingCVPrompt(profile: UserProfile) {
+        let alert = UIAlertController(
+            title: "Add a CV",
+            message: "A CV makes this application stronger. You can upload one now or apply without it.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Upload CV", style: .default) { [weak self] _ in
+            let cvVC = CVBuilderViewController()
+            cvVC.hidesBottomBarWhenPushed = true
+            self?.navigationController?.pushViewController(cvVC, animated: true)
+        })
+        alert.addAction(UIAlertAction(title: "Apply Without CV", style: .default) { [weak self] _ in
+            self?.submitApplication(profile: profile)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)

@@ -110,6 +110,7 @@ class OnboardingViewController: UIViewController {
                 if let error = error {
                     self.showAlert(title: "Guest Mode Failed", message: error.localizedDescription)
                 } else {
+                    OnboardingState.markCompleted()
                     AppRouter.showMainApp()
                 }
             }

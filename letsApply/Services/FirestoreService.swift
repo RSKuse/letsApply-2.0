@@ -24,6 +24,7 @@ class FirestoreService {
             UserProfile.CodingKeys.name.rawValue: profile.name,
             UserProfile.CodingKeys.email.rawValue: profile.email,
             UserProfile.CodingKeys.location.rawValue: profile.location,
+            UserProfile.CodingKeys.professionalSummary.rawValue: profile.professionalSummary,
             UserProfile.CodingKeys.jobTitle.rawValue: profile.jobTitle,
             UserProfile.CodingKeys.skills.rawValue: profile.skills,
             UserProfile.CodingKeys.qualifications.rawValue: profile.qualifications,
@@ -35,6 +36,14 @@ class FirestoreService {
 
         if let profilePictureUrl = profile.profilePictureUrl {
             data[UserProfile.CodingKeys.profilePictureUrl.rawValue] = profilePictureUrl
+        }
+
+        if let cvUrl = profile.cvUrl {
+            data[UserProfile.CodingKeys.cvUrl.rawValue] = cvUrl
+        }
+
+        if let cvFileName = profile.cvFileName {
+            data[UserProfile.CodingKeys.cvFileName.rawValue] = cvFileName
         }
 
         db.collection(FirebaseCollections.users.rawValue)
@@ -50,6 +59,9 @@ class FirestoreService {
                 email: "",
                 location: "South Africa",
                 profilePictureUrl: nil,
+                cvUrl: nil,
+                cvFileName: nil,
+                professionalSummary: "",
                 jobTitle: "",
                 skills: ["Swift", "UIKit", "Firebase"],
                 qualifications: [],
@@ -77,6 +89,9 @@ class FirestoreService {
                         email: "",
                         location: "South Africa",
                         profilePictureUrl: nil,
+                        cvUrl: nil,
+                        cvFileName: nil,
+                        professionalSummary: "",
                         jobTitle: "",
                         skills: ["Swift", "UIKit", "Firebase"],
                         qualifications: [],
@@ -121,6 +136,28 @@ class FirestoreService {
         }
     }
 
+    func fetchJob(jobId: String, completion: @escaping (Result<Job, Error>) -> Void) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .document(jobId)
+            .getDocument { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+
+                guard let snapshot = snapshot, let data = snapshot.data() else {
+                    completion(.failure(NSError(
+                        domain: "JobError",
+                        code: 404,
+                        userInfo: [NSLocalizedDescriptionKey: "This saved job could not be found."]
+                    )))
+                    return
+                }
+
+                completion(.success(self.mapJob(from: data, documentID: snapshot.documentID)))
+            }
+    }
+
 
     private func mapUserProfile(from data: [String: Any], fallbackUID: String) -> UserProfile {
         return UserProfile(
@@ -129,6 +166,9 @@ class FirestoreService {
             email: data[UserProfile.CodingKeys.email.rawValue] as? String ?? "",
             location: data[UserProfile.CodingKeys.location.rawValue] as? String ?? "South Africa",
             profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String ?? data["profile_picture_url"] as? String,
+            cvUrl: data[UserProfile.CodingKeys.cvUrl.rawValue] as? String ?? data["cv_url"] as? String,
+            cvFileName: data[UserProfile.CodingKeys.cvFileName.rawValue] as? String ?? data["cv_file_name"] as? String,
+            professionalSummary: data[UserProfile.CodingKeys.professionalSummary.rawValue] as? String ?? data["professional_summary"] as? String ?? "",
             jobTitle: data[UserProfile.CodingKeys.jobTitle.rawValue] as? String ?? data["job_title"] as? String ?? "",
             skills: data[UserProfile.CodingKeys.skills.rawValue] as? [String] ?? [],
             qualifications: data[UserProfile.CodingKeys.qualifications.rawValue] as? [String] ?? [],
@@ -324,7 +364,7 @@ class FirestoreService {
                 companyName: job.companyName,
                 appliedDate: Self.currentDateString(),
                 status: "submitted",
-                cvUrl: nil,
+                cvUrl: userProfile.cvUrl,
                 coverLetterText: nil,
                 isAIGenerated: false
             )
@@ -359,7 +399,7 @@ class FirestoreService {
 
                 let applications = snapshot?.documents.map {
                     self.mapApplication(from: $0.data(), documentId: $0.documentID)
-                } ?? []
+                }.sorted { $0.appliedDate > $1.appliedDate } ?? []
                 completion(.success(applications))
             }
     }
@@ -430,7 +470,7 @@ class FirestoreService {
 
                 let savedJobs = snapshot?.documents.map {
                     self.mapSavedJob(from: $0.data(), documentId: $0.documentID)
-                } ?? []
+                }.sorted { $0.savedDate > $1.savedDate } ?? []
                 completion(.success(savedJobs))
             }
     }
@@ -542,5 +582,69 @@ class FirestoreService {
                 completion(.success(url.absoluteString))
             }
         }
+    }
+
+    func uploadCVDocument(
+        uid: String,
+        fileURL: URL,
+        completion: @escaping (Result<(url: String, fileName: String), Error>) -> Void
+    ) {
+        let canAccessFile = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if canAccessFile {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let fileData = try Data(contentsOf: fileURL)
+            let safeFileName = fileURL.lastPathComponent
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "_")
+            let storageRef = storage.reference().child("user_cvs/\(uid)/\(safeFileName)")
+            let metadata = StorageMetadata()
+            metadata.contentType = "application/pdf"
+
+            storageRef.putData(fileData, metadata: metadata) { _, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+
+                storageRef.downloadURL { url, error in
+                    if let error = error {
+                        completion(.failure(error))
+                        return
+                    }
+
+                    guard let url = url else {
+                        completion(.failure(NSError(
+                            domain: "CVUploadError",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "Could not create a CV download URL."]
+                        )))
+                        return
+                    }
+
+                    completion(.success((url.absoluteString, fileURL.lastPathComponent)))
+                }
+            }
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    func updateUserCV(
+        uid: String,
+        cvUrl: String,
+        cvFileName: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        db.collection(FirebaseCollections.users.rawValue)
+            .document(uid)
+            .setData([
+                UserProfile.CodingKeys.cvUrl.rawValue: cvUrl,
+                UserProfile.CodingKeys.cvFileName.rawValue: cvFileName
+            ], merge: true, completion: completion)
     }
 }
