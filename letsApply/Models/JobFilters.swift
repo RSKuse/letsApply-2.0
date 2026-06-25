@@ -14,16 +14,3 @@ struct JobFilters {
     let location: String
     let jobType: String
 }
-
-
-/*struct JobFilters {
-    let skills: [String]
-    let location: String
-    let jobType: String
-    
-    enum CodingKeys: String, CodingKey {
-        case skills
-        case location
-        case jobType
-    }
- }*/

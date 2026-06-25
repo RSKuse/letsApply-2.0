@@ -2,174 +2,160 @@
 //  OnboardingViewController.swift
 //  letsApply
 //
-//  Created by Reuben Simphiwe Kuse on 2024/11/13.
-//
 
-import Foundation
 import UIKit
 
 class OnboardingViewController: UIViewController {
-    
-    var currentSlide: Int = 1
-    
-    lazy var onboardingCollectionView: UICollectionView = {
+
+    private let slides = [
+        ("Find jobs that match your future", "Browse trusted opportunities across South Africa and build momentum without clutter.", "magnifyingglass"),
+        ("Build a profile employers can trust", "Create a clean career profile with skills, education, experience, and your CV.", "person.text.rectangle"),
+        ("Apply smarter with Let's Apply", "Save jobs, track applications, and unlock premium AI tools when you are ready.", "sparkles")
+    ]
+
+    private lazy var onboardingCollectionView: UICollectionView = {
         let layout = UICollectionViewFlowLayout()
         layout.scrollDirection = .horizontal
         layout.minimumLineSpacing = 0
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.isPagingEnabled = true
         collectionView.showsHorizontalScrollIndicator = false
+        collectionView.backgroundColor = .systemBackground
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.register(OnboardingCell.self, forCellWithReuseIdentifier: OnboardingCell.identifier)
         return collectionView
     }()
-    
-    lazy var pageControl: UIPageControl = {
+
+    private lazy var pageControl: UIPageControl = {
         let pageControl = UIPageControl()
         pageControl.numberOfPages = slides.count
-        pageControl.currentPage = 0
-        pageControl.currentPageIndicatorTintColor = .blue
-        pageControl.pageIndicatorTintColor = .lightGray
+        pageControl.currentPageIndicatorTintColor = .systemGreen
+        pageControl.pageIndicatorTintColor = .systemGray4
         pageControl.translatesAutoresizingMaskIntoConstraints = false
         return pageControl
     }()
-    
-    lazy var getStartedButton: UIButton = {
-        return ButtonFacade.shared.createButton(
-            title: "Get Started",
-            backgroundColor: .systemBlue,
-            target: self,
-            action: #selector(handleGetStarted)
-        )
+
+    private lazy var createProfileButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("Create Profile", for: .normal)
+        button.setTitleColor(.white, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        button.backgroundColor = .systemGreen
+        button.layer.cornerRadius = 12
+        button.addTarget(self, action: #selector(createProfileTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
     }()
-    
-    //    lazy var signInButton: UIButton = {
-    //        return ButtonFacade.shared.createButton(
-    //            title: "Sign In",
-    //            backgroundColor: .systemBlue,
-    //            target: self,
-    //            action: #selector(handleSignIn)
-    //        )
-    //    }()
-    
-    private let slides = [
-        ("Find Jobs", "Personalized job recommendations tailored to your skills."),
-        ("Build Your CV", "Generate and download a professional CV with ease."),
-        ("Skill Challenges", "Complete gamified tasks to enhance your employability.")
-    ]
-    
-    private var autoSlideTimer: Timer?
-    
+
+    private lazy var continueAsGuestButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("Continue as Guest", for: .normal)
+        button.setTitleColor(.systemGreen, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        button.addTarget(self, action: #selector(continueAsGuestTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
+        view.backgroundColor = .systemBackground
+        setupNavigationBar()
         setupUI()
-        startAutoSlide()
     }
-    
+
+    private func setupNavigationBar() {
+        title = "Let's Apply"
+        navigationController?.navigationBar.prefersLargeTitles = false
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Sign In",
+            style: .plain,
+            target: self,
+            action: #selector(signInTapped)
+        )
+    }
+
     private func setupUI() {
         view.addSubview(onboardingCollectionView)
         view.addSubview(pageControl)
-        view.addSubview(getStartedButton)
-        
-        onboardingCollectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor).isActive = true
-        onboardingCollectionView.leftAnchor.constraint(equalTo: view.leftAnchor).isActive = true
-        onboardingCollectionView.rightAnchor.constraint(equalTo: view.rightAnchor).isActive = true
-        onboardingCollectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
-        
-        pageControl.bottomAnchor.constraint(equalTo: getStartedButton.topAnchor, constant: -20).isActive = true
-        pageControl.centerXAnchor.constraint(equalTo: view.centerXAnchor).isActive = true
-        
-        getStartedButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -50).isActive = true
-        getStartedButton.centerXAnchor.constraint(equalTo: view.centerXAnchor).isActive = true
-        getStartedButton.widthAnchor.constraint(equalToConstant: 200).isActive = true
-        getStartedButton.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        view.addSubview(createProfileButton)
+        view.addSubview(continueAsGuestButton)
+
+        NSLayoutConstraint.activate([
+            onboardingCollectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            onboardingCollectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            onboardingCollectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            onboardingCollectionView.bottomAnchor.constraint(equalTo: pageControl.topAnchor, constant: -16),
+
+            pageControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pageControl.bottomAnchor.constraint(equalTo: createProfileButton.topAnchor, constant: -24),
+
+            createProfileButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            createProfileButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            createProfileButton.bottomAnchor.constraint(equalTo: continueAsGuestButton.topAnchor, constant: -12),
+            createProfileButton.heightAnchor.constraint(equalToConstant: 52),
+
+            continueAsGuestButton.leadingAnchor.constraint(equalTo: createProfileButton.leadingAnchor),
+            continueAsGuestButton.trailingAnchor.constraint(equalTo: createProfileButton.trailingAnchor),
+            continueAsGuestButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
+            continueAsGuestButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
     }
-    
-    
-    @objc private func handleGetStarted() {
-        let homeScreenVC = JobListViewController()
-        setRootViewController(UINavigationController(rootViewController: homeScreenVC))
-    }
-    
-    private func setRootViewController(_ vc: UIViewController) {
-        if let window = UIApplication.shared.windows.first {
-            window.rootViewController = vc
-            UIView.transition(with: window, duration: 0.5, options: .transitionFlipFromRight, animations: nil)
+
+    @objc private func continueAsGuestTapped() {
+        FirebaseAuthenticationService.shared.signUpAnonymously { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self.showAlert(title: "Guest Mode Failed", message: error.localizedDescription)
+                } else {
+                    AppRouter.showMainApp()
+                }
+            }
         }
     }
-    
-}
 
-// MARK: ScrollView + Timer
-extension OnboardingViewController: UIScrollViewDelegate {
-    
-    private func startAutoSlide() {
-        autoSlideTimer?.invalidate() // Prevent duplicate timers
-        autoSlideTimer = Timer.scheduledTimer(
-            timeInterval: 3.0,
-            target: self,
-            selector: #selector(autoSlideToNextPage),
-            userInfo: nil,
-            repeats: true
-        )
+    @objc private func createProfileTapped() {
+        navigationController?.pushViewController(SignUpViewController(), animated: true)
     }
-    
-    @objc private func autoSlideToNextPage() {
-        guard slides.count > 1 else { return }
-        
-        // Update UI
-        currentSlide = (currentSlide + 1) % slides.count
-        onboardingCollectionView.scrollToItem(at: IndexPath(item: currentSlide, section: 0), at: .centeredHorizontally, animated: true)
-        pageControl.currentPage = currentSlide
+
+    @objc private func signInTapped() {
+        navigationController?.pushViewController(SignInViewController(), animated: true)
     }
-    
-    private func stopAutoSlide() {
-        autoSlideTimer?.invalidate()
-        autoSlideTimer = nil
-    }
-    
-    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        stopAutoSlide() // Stop auto-sliding when the user interacts
-    }
-    
-    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        startAutoSlide() // Resume auto-sliding after user interaction
+
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
-// MARK: Collection View
-extension OnboardingViewController: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
-    
+extension OnboardingViewController: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return slides.count
     }
-    
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        return CGSize(width: view.frame.width, height: 700.0)
-    }
-    
+
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         guard let cell = collectionView.dequeueReusableCell(withReuseIdentifier: OnboardingCell.identifier, for: indexPath) as? OnboardingCell else {
             return UICollectionViewCell()
         }
         let slide = slides[indexPath.item]
-        cell.configure(title: slide.0, description: slide.1)
+        cell.configure(title: slide.0, description: slide.1, systemImageName: slide.2)
         return cell
     }
-}
-    /*
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView.frame.width > 0 else { return } // Ensure frame width is valid
-        let currentPage = Int((scrollView.contentOffset.x / scrollView.frame.width).rounded())
-        pageControl.currentPage = currentPage
 
-        // Show or hide buttons on the last slide
-        let isLastPage = currentPage == slides.count - 1
-        signUpButton.isHidden = !isLastPage
-        signInButton.isHidden = !isLastPage
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        sizeForItemAt indexPath: IndexPath
+    ) -> CGSize {
+        return collectionView.bounds.size
     }
-    */
 
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView.bounds.width > 0 else { return }
+        pageControl.currentPage = Int(round(scrollView.contentOffset.x / scrollView.bounds.width))
+    }
+}

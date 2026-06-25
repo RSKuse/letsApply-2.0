@@ -64,7 +64,9 @@ class SignUpViewModel {
                 skills: skills.components(separatedBy: ", "),
                 qualifications: qualifications.components(separatedBy: ", "),
                 experience: experience,
-                education: education
+                education: education,
+                savedJobs: [],
+                isPremium: false
             )
             
             // ✅ Save the profile to Firestore

@@ -20,7 +20,7 @@ struct Job: Codable {
     let requirements: [String]
     let experience: Experience
     let compensation: Compensation
-    let application: Application
+    let application: JobApplicationInfo
     let jobCategory: String
     let postingDate: String
     let visibility: Visibility
@@ -68,7 +68,7 @@ struct SalaryRange: Codable {
     let currency: String
 }
 
-struct Application: Codable {
+struct JobApplicationInfo: Codable {
     let deadline: String
     let applicationUrl: String
     let applicationEmail: String
