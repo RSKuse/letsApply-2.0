@@ -15,14 +15,12 @@ final class AppRouter {
         setRootViewController(UINavigationController(rootViewController: OnboardingViewController()))
     }
 
-    static func showMainApp() {
-        setRootViewController(MainTabBarController())
+    static func showMainApp(selectedIndex: Int = 0, profileSetupMode: Bool = false) {
+        setRootViewController(MainTabBarController(initialSelectedIndex: selectedIndex, profileSetupMode: profileSetupMode))
     }
 
     static func showProfileSetup() {
-        let profileVC = ProfileViewController()
-        profileVC.isProfileSetupMode = true
-        setRootViewController(UINavigationController(rootViewController: profileVC))
+        showMainApp(selectedIndex: 2, profileSetupMode: true)
     }
 
     static func setRootViewController(_ viewController: UIViewController) {

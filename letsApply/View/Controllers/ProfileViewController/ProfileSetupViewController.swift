@@ -139,9 +139,9 @@ class ProfileViewController: UIViewController {
     private lazy var jobTitleTextField = makeTextField(placeholder: "Desired job title")
     private lazy var professionalSummaryTextView = makeTextView(placeholder: "Professional summary")
     private lazy var skillsTextField = makeTextField(placeholder: "Skills comma separated")
-    private lazy var qualificationsTextField = makeTextField(placeholder: "Qualifications comma separated")
+    private lazy var qualificationsTextField = makeTextField(placeholder: "Certificates, licences, qualifications")
     private lazy var experienceTextField = makeTextField(placeholder: "Experience")
-    private lazy var educationTextField = makeTextField(placeholder: "Education")
+    private lazy var educationTextField = makeTextField(placeholder: "Education history")
 
     private lazy var cvStatusLabel: UILabel = {
         let label = UILabel()
@@ -210,6 +210,7 @@ class ProfileViewController: UIViewController {
         title = isProfileSetupMode ? "Complete Profile" : "Profile"
         view.backgroundColor = .systemBackground
         imagePickerService.delegate = self
+        setupNavigationBar()
         setupUI()
         fetchProfileData()
     }
@@ -217,6 +218,17 @@ class ProfileViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         fetchProfileStats()
+    }
+
+    private func setupNavigationBar() {
+        guard isProfileSetupMode else { return }
+
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Home",
+            style: .plain,
+            target: self,
+            action: #selector(homeTapped)
+        )
     }
 
     private func setupUI() {
@@ -559,6 +571,10 @@ class ProfileViewController: UIViewController {
 
     @objc private func createProfileTapped() {
         navigationController?.pushViewController(SignUpViewController(), animated: true)
+    }
+
+    @objc private func homeTapped() {
+        tabBarController?.selectedIndex = 0
     }
 
     @objc private func logout() {

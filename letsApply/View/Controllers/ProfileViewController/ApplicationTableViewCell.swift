@@ -112,8 +112,21 @@ class ApplicationTableViewCell: UITableViewCell {
     func configure(with application: Application) {
         titleLabel.text = application.jobTitle
         companyLabel.text = application.companyName
-        dateLabel.text = "Applied \(application.appliedDate)"
+        dateLabel.text = "Applied \(formattedDate(application.appliedDate))"
         statusLabel.text = application.status.capitalized
         cvLabel.text = application.cvUrl == nil ? "No CV attached" : "CV attached"
+    }
+
+    private func formattedDate(_ dateText: String) -> String {
+        let isoFormatter = ISO8601DateFormatter()
+
+        guard let date = isoFormatter.date(from: dateText) else {
+            return dateText
+        }
+
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .none
+        return displayFormatter.string(from: date)
     }
 }

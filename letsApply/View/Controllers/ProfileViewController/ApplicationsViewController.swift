@@ -117,4 +117,21 @@ extension ApplicationsViewController: UITableViewDataSource, UITableViewDelegate
         cell.configure(with: application)
         return cell
     }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let application = applications[indexPath.row]
+
+        firestoreService.fetchJob(jobId: application.jobId) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let job):
+                    let detailsVC = JobDetailsViewController(job: job)
+                    detailsVC.hidesBottomBarWhenPushed = true
+                    self?.navigationController?.pushViewController(detailsVC, animated: true)
+                case .failure(let error):
+                    self?.showAlert(title: "Job Not Found", message: error.localizedDescription)
+                }
+            }
+        }
+    }
 }

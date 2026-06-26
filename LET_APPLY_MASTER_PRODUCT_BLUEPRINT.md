@@ -35,6 +35,27 @@ Let's Apply should bring these workflows into one modern mobile experience:
 
 The user should be able to open the app, discover relevant opportunities, understand the role quickly, apply with confidence, and track what happens next.
 
+### Long-Term Product Vision
+
+Let's Apply should become a career operating system for job seekers.
+
+The target experience is:
+
+"I don't need five different apps anymore. I only need Let's Apply."
+
+The platform should combine the best parts of job discovery, CV building, AI writing, ATS optimization, application tracking, and career coaching into one ecosystem built for graduates, professionals, government job seekers, researchers, international applicants, remote workers, and executive applicants.
+
+The long-term competitive reference is:
+
+- LinkedIn
+- Indeed
+- Canva
+- ChatGPT
+- ATS optimizers
+- Career coaches
+
+but redesigned as one focused mobile career platform.
+
 ---
 
 ## 2. Design Philosophy
@@ -258,6 +279,30 @@ Allow users to apply for jobs from inside the app.
 1. User taps Apply.
 2. User uploads or selects a CV.
 3. User confirms application details.
+4. User submits.
+5. Application is saved and tracked.
+
+### Auto Apply Assistant Principle
+
+The Auto Apply Assistant should prepare applications, not blindly send them.
+
+The app may:
+
+- Match the user's CV/profile to suitable jobs.
+- Generate a tailored CV version.
+- Generate a job-specific cover letter.
+- Draft an email to the recruiter or employer.
+- Prepare attachments.
+- Present the package for approval.
+- Track the application after submission.
+
+The app must not submit or email anything without user approval.
+
+This protects users from sending incorrect documents, applying to unsuitable roles, or breaching job-platform rules.
+
+Product phrasing:
+
+"Build an Auto Apply Assistant that can automatically prepare job applications by matching the user profile/CV to jobs, generating tailored CVs, cover letters and email messages, then presenting the completed application package for user approval before submission or email sending."
 4. User submits application.
 5. App stores application in Firestore.
 6. User can view application status later.

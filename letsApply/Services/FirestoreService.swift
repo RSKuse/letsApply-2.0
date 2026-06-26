@@ -327,8 +327,19 @@ class FirestoreService {
     func createApplication(
         userProfile: UserProfile,
         job: Job,
+        coverLetterText: String? = nil,
+        isAIGenerated: Bool = false,
         completion: @escaping (Result<Application, Error>) -> Void
     ) {
+        guard !userProfile.uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            completion(.failure(NSError(
+                domain: "ApplicationError",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Please sign in before applying."]
+            )))
+            return
+        }
+
         guard let jobId = job.id, !jobId.isEmpty else {
             completion(.failure(NSError(
                 domain: "ApplicationError",
@@ -365,8 +376,8 @@ class FirestoreService {
                 appliedDate: Self.currentDateString(),
                 status: "submitted",
                 cvUrl: userProfile.cvUrl,
-                coverLetterText: nil,
-                isAIGenerated: false
+                coverLetterText: coverLetterText,
+                isAIGenerated: isAIGenerated
             )
 
             document.setData(self.mapApplicationData(application)) { error in
@@ -557,29 +568,17 @@ class FirestoreService {
         }
 
         let storageRef = storage.reference().child("profile_pictures/\(uid).jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
 
-        storageRef.putData(imageData, metadata: nil) { _, error in
+        storageRef.putData(imageData, metadata: metadata) { _, error in
             if let error = error {
                 completion(.failure(error))
                 return
             }
 
-            storageRef.downloadURL { url, error in
-                if let error = error {
-                    completion(.failure(error))
-                    return
-                }
-
-                guard let url = url else {
-                    completion(.failure(NSError(
-                        domain: "URLGenerationError",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Could not generate image URL."]
-                    )))
-                    return
-                }
-
-                completion(.success(url.absoluteString))
+            self.fetchDownloadURLWithRetry(reference: storageRef, fileType: "photo") { result in
+                completion(result.map { $0.absoluteString })
             }
         }
     }
@@ -611,22 +610,13 @@ class FirestoreService {
                     return
                 }
 
-                storageRef.downloadURL { url, error in
-                    if let error = error {
+                self.fetchDownloadURLWithRetry(reference: storageRef, fileType: "CV") { result in
+                    switch result {
+                    case .success(let url):
+                        completion(.success((url.absoluteString, fileURL.lastPathComponent)))
+                    case .failure(let error):
                         completion(.failure(error))
-                        return
                     }
-
-                    guard let url = url else {
-                        completion(.failure(NSError(
-                            domain: "CVUploadError",
-                            code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "Could not create a CV download URL."]
-                        )))
-                        return
-                    }
-
-                    completion(.success((url.absoluteString, fileURL.lastPathComponent)))
                 }
             }
         } catch {
@@ -646,5 +636,39 @@ class FirestoreService {
                 UserProfile.CodingKeys.cvUrl.rawValue: cvUrl,
                 UserProfile.CodingKeys.cvFileName.rawValue: cvFileName
             ], merge: true, completion: completion)
+    }
+
+    private func fetchDownloadURLWithRetry(
+        reference: StorageReference,
+        fileType: String,
+        attemptsRemaining: Int = 3,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        reference.downloadURL { url, error in
+            if let url = url {
+                completion(.success(url))
+                return
+            }
+
+            guard attemptsRemaining > 0 else {
+                completion(.failure(NSError(
+                    domain: "StorageDownloadURL",
+                    code: -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Firebase Storage did not return the uploaded \(fileType) URL. Check Storage rules and try again. \(error?.localizedDescription ?? "")"
+                    ]
+                )))
+                return
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                self.fetchDownloadURLWithRetry(
+                    reference: reference,
+                    fileType: fileType,
+                    attemptsRemaining: attemptsRemaining - 1,
+                    completion: completion
+                )
+            }
+        }
     }
 }

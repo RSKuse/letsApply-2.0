@@ -116,6 +116,7 @@ class JobDetailsViewController: UIViewController {
 
     private lazy var premiumToolsStackView: UIStackView = {
         let stackView = UIStackView(arrangedSubviews: [
+            makePremiumButton(title: "Auto Apply Assistant", action: #selector(autoApplyAssistantTapped)),
             makePremiumButton(title: "Generate Cover Letter", action: #selector(generateCoverLetterTapped)),
             makePremiumButton(title: "Tailor CV to this Job", action: #selector(tailorCVTapped)),
             makePremiumButton(title: "Improve CV for this Job", action: #selector(improveCVTapped))
@@ -347,6 +348,11 @@ class JobDetailsViewController: UIViewController {
     }
 
     @objc private func applyTapped() {
+        guard !hasApplied else {
+            showAlert(title: "Already Applied", message: "Your application for this job has already been submitted.")
+            return
+        }
+
         guard let user = Auth.auth().currentUser, !user.isAnonymous else {
             showRegistrationPrompt()
             return
@@ -360,16 +366,11 @@ class JobDetailsViewController: UIViewController {
                 case .success(let profile):
                     self.currentProfile = profile
                     guard profile.isComplete else {
-                        self.showProfileCompletionPrompt()
+                        self.showProfileCompletionPrompt(missingFields: profile.missingRequiredFields)
                         return
                     }
 
-                    guard profile.cvUrl != nil else {
-                        self.showMissingCVPrompt(profile: profile)
-                        return
-                    }
-
-                    self.submitApplication(profile: profile)
+                    self.openApplyConfirmation(profile: profile)
                 case .failure(let error):
                     self.showAlert(title: "Profile Error", message: error.localizedDescription)
                 }
@@ -377,24 +378,14 @@ class JobDetailsViewController: UIViewController {
         }
     }
 
-    private func submitApplication(profile: UserProfile) {
-        applyButton.isEnabled = false
-
-        firestoreService.createApplication(userProfile: profile, job: job) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.applyButton.isEnabled = true
-
-                switch result {
-                case .success:
-                    self.hasApplied = true
-                    self.updateApplyButton()
-                    self.showAlert(title: "Application Submitted", message: "Your application for \(self.job.title) has been submitted.")
-                case .failure(let error):
-                    self.showAlert(title: "Application Not Submitted", message: error.localizedDescription)
-                }
-            }
+    private func openApplyConfirmation(profile: UserProfile) {
+        let applyVC = ApplyConfirmationViewController(job: job, userProfile: profile)
+        applyVC.hidesBottomBarWhenPushed = true
+        applyVC.onApplicationSubmitted = { [weak self] in
+            self?.hasApplied = true
+            self?.updateApplyButton()
         }
+        navigationController?.pushViewController(applyVC, animated: true)
     }
 
     @objc private func saveTapped() {
@@ -445,6 +436,31 @@ class JobDetailsViewController: UIViewController {
         openAITool(.improveCV)
     }
 
+    @objc private func autoApplyAssistantTapped() {
+        guard let profile = currentProfile else {
+            showAlert(title: "Profile Needed", message: "Load or complete your profile before using the Auto Apply Assistant.")
+            return
+        }
+
+        guard profile.isComplete else {
+            showProfileCompletionPrompt(missingFields: profile.missingRequiredFields)
+            return
+        }
+
+        guard profile.isPremium else {
+            showAlert(title: "Premium Required", message: "Auto Apply Assistant is a premium career tool.")
+            return
+        }
+
+        let autoApplyVC = AutoApplyAssistantViewController(job: job, userProfile: profile)
+        autoApplyVC.hidesBottomBarWhenPushed = true
+        autoApplyVC.onApplicationSubmitted = { [weak self] in
+            self?.hasApplied = true
+            self?.updateApplyButton()
+        }
+        navigationController?.pushViewController(autoApplyVC, animated: true)
+    }
+
     private func openAITool(_ tool: AICareerService.CareerTool) {
         guard let profile = currentProfile else {
             showAlert(title: "Profile Needed", message: "Load or complete your profile before using premium AI tools.")
@@ -465,28 +481,11 @@ class JobDetailsViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    private func showMissingCVPrompt(profile: UserProfile) {
-        let alert = UIAlertController(
-            title: "Add a CV",
-            message: "A CV makes this application stronger. You can upload one now or apply without it.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Upload CV", style: .default) { [weak self] _ in
-            let cvVC = CVBuilderViewController()
-            cvVC.hidesBottomBarWhenPushed = true
-            self?.navigationController?.pushViewController(cvVC, animated: true)
-        })
-        alert.addAction(UIAlertAction(title: "Apply Without CV", style: .default) { [weak self] _ in
-            self?.submitApplication(profile: profile)
-        })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        present(alert, animated: true)
-    }
-
-    private func showProfileCompletionPrompt() {
+    private func showProfileCompletionPrompt(missingFields: [String]) {
+        let missingText = missingFields.isEmpty ? "" : "\n\nMissing: \(missingFields.joined(separator: ", "))"
         let alert = UIAlertController(
             title: "Complete Profile",
-            message: "Complete your profile before applying for this job.",
+            message: "Complete your profile before applying for this job.\(missingText)",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Complete Profile", style: .default) { [weak self] _ in
