@@ -44,6 +44,7 @@ class ApplicationTableViewCell: UITableViewCell {
     }()
 
     private lazy var cvLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: .secondaryLabel, lines: 1)
+    private lazy var packageLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: .systemGreen, lines: 1)
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -64,6 +65,7 @@ class ApplicationTableViewCell: UITableViewCell {
         cardView.addSubview(dateLabel)
         cardView.addSubview(statusLabel)
         cardView.addSubview(cvLabel)
+        cardView.addSubview(packageLabel)
 
         NSLayoutConstraint.activate([
             cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
@@ -96,7 +98,11 @@ class ApplicationTableViewCell: UITableViewCell {
             cvLabel.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 8),
             cvLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             cvLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
-            cvLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
+
+            packageLabel.topAnchor.constraint(equalTo: cvLabel.bottomAnchor, constant: 6),
+            packageLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            packageLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
+            packageLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -114,7 +120,20 @@ class ApplicationTableViewCell: UITableViewCell {
         companyLabel.text = application.companyName
         dateLabel.text = "Applied \(formattedDate(application.appliedDate))"
         statusLabel.text = application.status.capitalized
-        cvLabel.text = application.cvUrl == nil ? "No CV attached" : "CV attached"
+        cvLabel.text = application.cvUrl == nil ? "Profile CV draft used" : "CV attached"
+        packageLabel.text = packageText(for: application)
+    }
+
+    private func packageText(for application: Application) -> String {
+        guard application.isAIGenerated == true else {
+            return "Standard application"
+        }
+
+        if let matchScore = application.matchScore {
+            return "Smart package - \(matchScore)% match"
+        }
+
+        return "Smart package submitted"
     }
 
     private func formattedDate(_ dateText: String) -> String {

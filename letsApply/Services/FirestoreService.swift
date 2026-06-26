@@ -329,6 +329,10 @@ class FirestoreService {
         job: Job,
         coverLetterText: String? = nil,
         isAIGenerated: Bool = false,
+        tailoredCVText: String? = nil,
+        recruiterEmailSubject: String? = nil,
+        recruiterEmailBody: String? = nil,
+        matchScore: Int? = nil,
         completion: @escaping (Result<Application, Error>) -> Void
     ) {
         guard !userProfile.uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -362,7 +366,11 @@ class FirestoreService {
             status: "submitted",
             cvUrl: userProfile.cvUrl,
             coverLetterText: coverLetterText,
-            isAIGenerated: isAIGenerated
+            isAIGenerated: isAIGenerated,
+            tailoredCVText: tailoredCVText,
+            recruiterEmailSubject: recruiterEmailSubject,
+            recruiterEmailBody: recruiterEmailBody,
+            matchScore: matchScore
         )
 
         document.setData(mapApplicationData(application), merge: false) { error in
@@ -505,6 +513,22 @@ class FirestoreService {
             data["coverLetterText"] = coverLetterText
         }
 
+        if let tailoredCVText = application.tailoredCVText {
+            data["tailoredCVText"] = tailoredCVText
+        }
+
+        if let recruiterEmailSubject = application.recruiterEmailSubject {
+            data["recruiterEmailSubject"] = recruiterEmailSubject
+        }
+
+        if let recruiterEmailBody = application.recruiterEmailBody {
+            data["recruiterEmailBody"] = recruiterEmailBody
+        }
+
+        if let matchScore = application.matchScore {
+            data["matchScore"] = matchScore
+        }
+
         return data
     }
 
@@ -519,7 +543,11 @@ class FirestoreService {
             status: data["status"] as? String ?? "submitted",
             cvUrl: data["cvUrl"] as? String,
             coverLetterText: data["coverLetterText"] as? String,
-            isAIGenerated: data["isAIGenerated"] as? Bool
+            isAIGenerated: data["isAIGenerated"] as? Bool,
+            tailoredCVText: data["tailoredCVText"] as? String,
+            recruiterEmailSubject: data["recruiterEmailSubject"] as? String,
+            recruiterEmailBody: data["recruiterEmailBody"] as? String,
+            matchScore: data["matchScore"] as? Int
         )
     }
 
