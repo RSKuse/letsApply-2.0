@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUserDocument(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function ownsIncomingDocument() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    function ownsExistingDocument() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function ownsGeneratedDocumentId(documentId) {
+      return signedIn() && documentId.matches(request.auth.uid + '_.*');
+    }
+
+    match /users/{userId} {
+      allow read, write: if ownsUserDocument(userId);
+    }
+
+    match /jobs/{document=**} {
+      allow read: if signedIn();
+    }
+
+    match /applications/{applicationId} {
+      allow create: if ownsIncomingDocument();
+      allow get: if ownsExistingDocument() || ownsGeneratedDocumentId(applicationId);
+      allow list: if ownsExistingDocument();
+      allow update, delete: if ownsExistingDocument();
+    }
+
+    match /savedJobs/{savedJobId} {
+      allow create: if ownsIncomingDocument();
+      allow get: if ownsExistingDocument() || ownsGeneratedDocumentId(savedJobId);
+      allow list: if ownsExistingDocument();
+      allow update, delete: if ownsExistingDocument();
+    }
+  }
+}
