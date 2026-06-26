@@ -25,30 +25,48 @@ class ProfilePictureService {
             return
         }
         
-        let storageRef = Storage.storage().reference().child("profile_pictures/\(uid).jpg")
+        let storageRef = Storage.storage().reference().child("profile_pictures/\(uid)/profile.jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
         
-        storageRef.putData(imageData, metadata: nil) { _, error in
+        storageRef.putData(imageData, metadata: metadata) { _, error in
             if let error = error {
                 completion(.failure(error))
                 return
             }
             
-            storageRef.downloadURL { url, error in
-                if let error = error {
-                    completion(.failure(error))
-                    return
-                }
-                
-                guard let url = url else {
-                    completion(.failure(NSError(
-                        domain: "URLGenerationError",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Could not generate image URL."]
-                    )))
-                    return
-                }
-                
+            self.fetchDownloadURLWithRetry(reference: storageRef, attemptsRemaining: 3, completion: completion)
+        }
+    }
+
+    private func fetchDownloadURLWithRetry(
+        reference: StorageReference,
+        attemptsRemaining: Int,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        reference.downloadURL { url, error in
+            if let url = url {
                 completion(.success(url.absoluteString))
+                return
+            }
+
+            guard attemptsRemaining > 0 else {
+                completion(.failure(NSError(
+                    domain: "URLGenerationError",
+                    code: -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Firebase Storage did not return the uploaded photo URL. Check Storage rules and try again. \(error?.localizedDescription ?? "")"
+                    ]
+                )))
+                return
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                self.fetchDownloadURLWithRetry(
+                    reference: reference,
+                    attemptsRemaining: attemptsRemaining - 1,
+                    completion: completion
+                )
             }
         }
     }

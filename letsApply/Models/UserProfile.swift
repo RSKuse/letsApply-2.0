@@ -56,7 +56,7 @@ struct UserProfile: Codable {
         }
 
         if qualifications.isEmpty {
-            fields.append("Qualifications")
+            fields.append("Certificates or qualifications")
         }
 
         if experience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -64,7 +64,7 @@ struct UserProfile: Codable {
         }
 
         if education.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            fields.append("Education")
+            fields.append("Education history")
         }
 
         return fields

@@ -8,11 +8,27 @@ import UIKit
 
 class MainTabBarController: UITabBarController {
 
+    private let initialSelectedIndex: Int
+    private let profileSetupMode: Bool
+
+    init(initialSelectedIndex: Int = 0, profileSetupMode: Bool = false) {
+        self.initialSelectedIndex = initialSelectedIndex
+        self.profileSetupMode = profileSetupMode
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        self.initialSelectedIndex = 0
+        self.profileSetupMode = false
+        super.init(coder: coder)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
         setupTabs()
         configureTabBarAppearance()
+        selectedIndex = initialSelectedIndex
     }
 
     private func setupTabs() {
@@ -25,9 +41,10 @@ class MainTabBarController: UITabBarController {
             rootViewController: JobsViewController()
         )
 
-        let profileVC = UINavigationController(
-            rootViewController: ProfileViewController()
-        )
+        let profileRootVC = ProfileViewController()
+        profileRootVC.isProfileSetupMode = profileSetupMode
+
+        let profileVC = UINavigationController(rootViewController: profileRootVC)
 
         homeVC.tabBarItem = UITabBarItem(
             title: "Home",
