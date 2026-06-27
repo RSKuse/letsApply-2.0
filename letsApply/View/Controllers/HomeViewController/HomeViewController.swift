@@ -16,11 +16,9 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
 
     private lazy var logoImageView: UIImageView = {
         let imageView = UIImageView()
-        imageView.image = UIImage(named: "app_logo") ?? UIImage(systemName: "briefcase.fill")
-        imageView.tintColor = .systemGreen
-        imageView.layer.cornerRadius = 17
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
+        imageView.image = UIImage(systemName: "briefcase.fill")
+        imageView.tintColor = AppTheme.brand
+        imageView.contentMode = .scaleAspectFit
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
@@ -31,7 +29,7 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
         tableView.dataSource = self
         tableView.allowsSelection = true
         tableView.separatorStyle = .none
-        tableView.backgroundColor = .white
+        tableView.backgroundColor = AppTheme.background
         tableView.showsVerticalScrollIndicator = false
         tableView.translatesAutoresizingMaskIntoConstraints = false
         return tableView
@@ -39,7 +37,7 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
+        view.backgroundColor = AppTheme.background
         setupUI()
         setupNavigationBar()
         registerCells()
@@ -67,8 +65,8 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
         navigationItem.titleView = logoImageView
 
         NSLayoutConstraint.activate([
-            logoImageView.heightAnchor.constraint(equalToConstant: 34),
-            logoImageView.widthAnchor.constraint(equalToConstant: 34)
+            logoImageView.heightAnchor.constraint(equalToConstant: 26),
+            logoImageView.widthAnchor.constraint(equalToConstant: 26)
         ])
     }
 
@@ -119,7 +117,7 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return indexPath.section == 0 ? 225 : 116
+        return indexPath.section == 0 ? 224 : 144
     }
 
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {

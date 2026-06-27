@@ -16,7 +16,7 @@ class TableSectionHeaderView: UIView {
     lazy var titleLabel: UILabel = {
         let label = UILabel()
         label.font = UIFont.systemFont(ofSize: 22, weight: .bold)
-        label.textColor = .black
+        label.textColor = .label
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -25,14 +25,14 @@ class TableSectionHeaderView: UIView {
         let button = UIButton(type: .system)
         button.setTitle("See All", for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .bold)
-        button.setTitleColor(.systemGreen, for: .normal)
+        button.setTitleColor(AppTheme.brand, for: .normal)
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .white
+        backgroundColor = AppTheme.background
         setupUI()
     }
 

@@ -29,6 +29,7 @@ class ProfileViewController: UIViewController {
             completionCardView,
             nameTextField,
             emailTextField,
+            phoneTextField,
             locationTextField,
             jobTitleTextField,
             professionalSummaryTextView,
@@ -135,6 +136,7 @@ class ProfileViewController: UIViewController {
 
     private lazy var nameTextField = makeTextField(placeholder: "Full name")
     private lazy var emailTextField = makeTextField(placeholder: "Email", keyboardType: .emailAddress)
+    private lazy var phoneTextField = makeTextField(placeholder: "Phone number", keyboardType: .phonePad)
     private lazy var locationTextField = makeTextField(placeholder: "Location")
     private lazy var jobTitleTextField = makeTextField(placeholder: "Desired job title")
     private lazy var professionalSummaryTextView = makeTextView(placeholder: "Professional summary")
@@ -145,7 +147,9 @@ class ProfileViewController: UIViewController {
 
     private lazy var cvStatusLabel: UILabel = {
         let label = UILabel()
-        label.text = AppFeatures.firebaseStorageUploadsEnabled ? "No CV uploaded yet" : "Using profile CV draft for now"
+        label.text = AppFeatures.firebaseStorageUploadsEnabled
+            ? "No CV uploaded yet"
+            : "Create and share a local PDF in CV Studio"
         label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -155,11 +159,12 @@ class ProfileViewController: UIViewController {
     private lazy var uploadCVButton: UIButton = {
         let button = makeSecondaryButton(title: AppFeatures.firebaseStorageUploadsEnabled ? "Upload CV PDF" : "PDF Upload Paused")
         button.addTarget(self, action: #selector(uploadCVTapped), for: .touchUpInside)
+        button.isHidden = !AppFeatures.firebaseStorageUploadsEnabled
         return button
     }()
 
     private lazy var cvButton: UIButton = {
-        let button = makeSecondaryButton(title: "CV Builder")
+        let button = makeSecondaryButton(title: "CV Studio")
         button.addTarget(self, action: #selector(openCVBuilder), for: .touchUpInside)
         return button
     }()
@@ -401,6 +406,7 @@ class ProfileViewController: UIViewController {
 
         nameTextField.text = profile.name
         emailTextField.text = profile.email.isEmpty ? FirebaseAuthenticationService.shared.currentUserEmail : profile.email
+        phoneTextField.text = profile.phone
         locationTextField.text = profile.location
         jobTitleTextField.text = profile.jobTitle
         professionalSummaryTextView.text = profile.professionalSummary.isEmpty ? "Professional summary" : profile.professionalSummary
@@ -496,6 +502,7 @@ class ProfileViewController: UIViewController {
             uid: user.uid,
             name: nameTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             email: emailTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? user.email ?? "",
+            phone: phoneTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             location: locationTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             profilePictureUrl: currentProfile.profilePictureUrl,
             cvUrl: currentProfile.cvUrl,
@@ -506,6 +513,10 @@ class ProfileViewController: UIViewController {
             qualifications: parseList(qualificationsTextField.text),
             experience: experienceTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             education: educationTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            workExperiences: currentProfile.workExperiences,
+            educationEntries: currentProfile.educationEntries,
+            qualificationEntries: currentProfile.qualificationEntries,
+            references: currentProfile.references,
             savedJobs: currentProfile.savedJobs,
             isPremium: currentProfile.isPremium
         )

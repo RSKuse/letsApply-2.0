@@ -3,51 +3,59 @@
 //  letsApply
 //
 
-
 import UIKit
 
 class FeaturedJobCollectionCell: UICollectionViewCell {
 
     static let reuseIdentifier = "FeaturedJobCollectionCellID"
 
-    lazy var jobImageView: UIImageView = {
+    private lazy var jobImageView: UIImageView = {
         let imageView = UIImageView()
         imageView.image = UIImage(systemName: "briefcase.fill")
-        imageView.tintColor = .systemGreen
-        imageView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+        imageView.tintColor = AppTheme.brand
+        imageView.backgroundColor = AppTheme.mutedSurface
         imageView.contentMode = .scaleAspectFit
+        imageView.layer.cornerRadius = AppTheme.cardRadius
         imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 14
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
 
-    lazy var featuredBadge: UILabel = {
+    private lazy var featuredBadge: UILabel = {
         let label = UILabel()
-        label.text = "Featured"
+        label.text = "FEATURED"
         label.textColor = .white
-        label.backgroundColor = .systemGreen
-        label.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        label.backgroundColor = AppTheme.brand
+        label.font = UIFont.systemFont(ofSize: 10, weight: .bold)
         label.textAlignment = .center
-        label.layer.cornerRadius = 6
+        label.layer.cornerRadius = 5
         label.clipsToBounds = true
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
 
-    lazy var jobTitleLabel: UILabel = {
+    private lazy var jobTitleLabel: UILabel = {
         let label = UILabel()
-        label.font = UIFont.systemFont(ofSize: 18, weight: .bold)
-        label.textColor = .black
+        label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+        label.textColor = .label
         label.numberOfLines = 2
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
 
-    lazy var companyLabel: UILabel = {
+    private lazy var companyLabel: UILabel = {
         let label = UILabel()
-        label.font = UIFont.systemFont(ofSize: 14, weight: .regular)
-        label.textColor = .darkGray
+        label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = AppTheme.secondaryText
+        label.numberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var salaryLabel: UILabel = {
+        let label = UILabel()
+        label.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        label.textColor = AppTheme.brand
         label.numberOfLines = 1
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -63,36 +71,46 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
     }
 
     private func setupUI() {
-        contentView.backgroundColor = .white
+        contentView.backgroundColor = AppTheme.surface
+        contentView.layer.cornerRadius = AppTheme.cardRadius
+        contentView.layer.borderWidth = 1
+        contentView.layer.borderColor = AppTheme.border.cgColor
+        contentView.clipsToBounds = true
 
         contentView.addSubview(jobImageView)
         contentView.addSubview(featuredBadge)
         contentView.addSubview(jobTitleLabel)
         contentView.addSubview(companyLabel)
+        contentView.addSubview(salaryLabel)
 
+        NSLayoutConstraint.activate([
+            jobImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            jobImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            jobImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10),
+            jobImageView.heightAnchor.constraint(equalToConstant: 86),
 
-        jobImageView.topAnchor.constraint(equalTo: contentView.topAnchor).isActive = true
-        jobImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor).isActive = true
-        jobImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor).isActive = true
-        jobImageView.heightAnchor.constraint(equalToConstant: 120).isActive = true
+            featuredBadge.leadingAnchor.constraint(equalTo: jobImageView.leadingAnchor, constant: 8),
+            featuredBadge.bottomAnchor.constraint(equalTo: jobImageView.bottomAnchor, constant: -8),
+            featuredBadge.widthAnchor.constraint(equalToConstant: 72),
+            featuredBadge.heightAnchor.constraint(equalToConstant: 22),
 
-        featuredBadge.leadingAnchor.constraint(equalTo: jobImageView.leadingAnchor, constant: 8).isActive = true
-        featuredBadge.bottomAnchor.constraint(equalTo: jobImageView.bottomAnchor, constant: -8).isActive = true
-        featuredBadge.widthAnchor.constraint(equalToConstant: 78).isActive = true
-        featuredBadge.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            jobTitleLabel.topAnchor.constraint(equalTo: jobImageView.bottomAnchor, constant: 10),
+            jobTitleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            jobTitleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10),
 
-        jobTitleLabel.topAnchor.constraint(equalTo: jobImageView.bottomAnchor, constant: 10).isActive = true
-        jobTitleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor).isActive = true
-        jobTitleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor).isActive = true
+            companyLabel.topAnchor.constraint(equalTo: jobTitleLabel.bottomAnchor, constant: 5),
+            companyLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
+            companyLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
 
-        companyLabel.topAnchor.constraint(equalTo: jobTitleLabel.bottomAnchor, constant: 4).isActive = true
-        companyLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor).isActive = true
-        companyLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor).isActive = true
-
+            salaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
+            salaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
+            salaryLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10)
+        ])
     }
 
     func configure(with job: Job) {
         jobTitleLabel.text = job.title
         companyLabel.text = job.companyName
+        salaryLabel.text = job.salaryText
     }
 }

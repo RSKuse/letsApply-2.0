@@ -30,7 +30,7 @@ class JobsViewController: UIViewController {
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.delegate = self
         collectionView.dataSource = self
-        collectionView.backgroundColor = .systemBackground
+        collectionView.backgroundColor = AppTheme.background
         collectionView.showsVerticalScrollIndicator = false
         collectionView.contentInset = UIEdgeInsets(top: 16, left: 20, bottom: 24, right: 20)
         collectionView.register(JobCollectionViewCell.self, forCellWithReuseIdentifier: JobCollectionViewCell.reuseIdentifier)
@@ -67,7 +67,7 @@ class JobsViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = AppTheme.background
         setupNavigationBar()
         setupUI()
         fetchJobs()
@@ -148,7 +148,7 @@ class JobsViewController: UIViewController {
     private func styleFilterButton(_ button: UIButton, selected: Bool) {
         var configuration = UIButton.Configuration.filled()
         configuration.title = button.accessibilityLabel
-        configuration.baseBackgroundColor = selected ? .systemGreen : .secondarySystemBackground
+        configuration.baseBackgroundColor = selected ? AppTheme.brand : AppTheme.mutedSurface
         configuration.baseForegroundColor = selected ? .white : .label
         configuration.cornerStyle = .capsule
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14)
@@ -222,7 +222,7 @@ extension JobsViewController: UICollectionViewDelegate, UICollectionViewDataSour
         let columns: CGFloat = availableWidth > 500 ? 3 : 2
         let totalSpacing = (columns - 1) * 12
         let width = floor((availableWidth - totalSpacing) / columns)
-        return CGSize(width: width, height: 210)
+        return CGSize(width: width, height: 220)
     }
 }
 

@@ -11,9 +11,9 @@ class JobCollectionViewCell: UICollectionViewCell {
 
     private lazy var cardView: UIView = {
         let view = UIView()
-        view.backgroundColor = .secondarySystemBackground
-        view.layer.cornerRadius = 16
-        view.layer.borderColor = UIColor.systemGray5.cgColor
+        view.backgroundColor = AppTheme.surface
+        view.layer.cornerRadius = AppTheme.cardRadius
+        view.layer.borderColor = AppTheme.border.cgColor
         view.layer.borderWidth = 1
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
@@ -22,10 +22,10 @@ class JobCollectionViewCell: UICollectionViewCell {
     private lazy var companyIconView: UIImageView = {
         let imageView = UIImageView()
         imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = .systemGreen
-        imageView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+        imageView.tintColor = AppTheme.brand
+        imageView.backgroundColor = AppTheme.mutedSurface
         imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = 14
+        imageView.layer.cornerRadius = AppTheme.cardRadius
         imageView.clipsToBounds = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
@@ -34,7 +34,7 @@ class JobCollectionViewCell: UICollectionViewCell {
     private lazy var jobTypeLabel: UILabel = {
         let label = UILabel()
         label.font = UIFont.systemFont(ofSize: 11, weight: .bold)
-        label.textColor = .systemGreen
+        label.textColor = AppTheme.brand
         label.textAlignment = .right
         label.numberOfLines = 1
         label.translatesAutoresizingMaskIntoConstraints = false

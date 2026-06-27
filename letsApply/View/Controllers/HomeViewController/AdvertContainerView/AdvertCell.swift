@@ -9,30 +9,28 @@ class AdvertCell: UICollectionViewCell {
 
     static let reuseIdentifier = "AdvertCellID"
 
-    private lazy var bannerImageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(named: "advert_banner")
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 22
-        imageView.backgroundColor = .systemGreen
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
-    }()
-
-    private lazy var overlayView: UIView = {
+    private lazy var bannerView: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor.black.withAlphaComponent(0.25)
-        view.layer.cornerRadius = 22
+        view.backgroundColor = AppTheme.ink
+        view.layer.cornerRadius = AppTheme.cardRadius
         view.clipsToBounds = true
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
 
+    private lazy var eyebrowLabel: UILabel = {
+        let label = UILabel()
+        label.text = "CAREER COMMAND CENTRE"
+        label.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+        label.textColor = AppTheme.cyan
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
     private lazy var titleLabel: UILabel = {
         let label = UILabel()
-        label.text = "Apply smarter"
-        label.font = UIFont.systemFont(ofSize: 26, weight: .bold)
+        label.text = "Move from discovery\nto application"
+        label.font = UIFont.systemFont(ofSize: 23, weight: .bold)
         label.textColor = .white
         label.numberOfLines = 2
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -41,12 +39,20 @@ class AdvertCell: UICollectionViewCell {
 
     private lazy var subtitleLabel: UILabel = {
         let label = UILabel()
-        label.text = "Find jobs, build your profile, and track every opportunity."
-        label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
-        label.textColor = .white
+        label.text = "Live jobs connected  |  Review before submit"
+        label.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        label.textColor = UIColor.white.withAlphaComponent(0.66)
         label.numberOfLines = 2
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
+    }()
+
+    private lazy var signalIconView: UIImageView = {
+        let imageView = UIImageView(image: UIImage(systemName: "scope"))
+        imageView.tintColor = AppTheme.brandBright
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        return imageView
     }()
 
     override init(frame: CGRect) {
@@ -59,29 +65,34 @@ class AdvertCell: UICollectionViewCell {
     }
 
     private func setupUI() {
-        contentView.addSubview(bannerImageView)
-        contentView.addSubview(overlayView)
-        overlayView.addSubview(titleLabel)
-        overlayView.addSubview(subtitleLabel)
+        contentView.addSubview(bannerView)
+        bannerView.addSubview(eyebrowLabel)
+        bannerView.addSubview(titleLabel)
+        bannerView.addSubview(subtitleLabel)
+        bannerView.addSubview(signalIconView)
 
         NSLayoutConstraint.activate([
-            bannerImageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            bannerImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            bannerImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            bannerImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            bannerView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            bannerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            bannerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            bannerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            overlayView.topAnchor.constraint(equalTo: bannerImageView.topAnchor),
-            overlayView.leadingAnchor.constraint(equalTo: bannerImageView.leadingAnchor),
-            overlayView.trailingAnchor.constraint(equalTo: bannerImageView.trailingAnchor),
-            overlayView.bottomAnchor.constraint(equalTo: bannerImageView.bottomAnchor),
+            eyebrowLabel.topAnchor.constraint(equalTo: bannerView.topAnchor, constant: 18),
+            eyebrowLabel.leadingAnchor.constraint(equalTo: bannerView.leadingAnchor, constant: 18),
+            eyebrowLabel.trailingAnchor.constraint(equalTo: signalIconView.leadingAnchor, constant: -12),
 
-            titleLabel.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 20),
-            titleLabel.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -20),
+            signalIconView.topAnchor.constraint(equalTo: bannerView.topAnchor, constant: 18),
+            signalIconView.trailingAnchor.constraint(equalTo: bannerView.trailingAnchor, constant: -18),
+            signalIconView.widthAnchor.constraint(equalToConstant: 34),
+            signalIconView.heightAnchor.constraint(equalToConstant: 34),
+
+            titleLabel.leadingAnchor.constraint(equalTo: bannerView.leadingAnchor, constant: 18),
+            titleLabel.trailingAnchor.constraint(equalTo: bannerView.trailingAnchor, constant: -72),
             titleLabel.bottomAnchor.constraint(equalTo: subtitleLabel.topAnchor, constant: -8),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            subtitleLabel.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -20)
+            subtitleLabel.trailingAnchor.constraint(equalTo: bannerView.trailingAnchor, constant: -18),
+            subtitleLabel.bottomAnchor.constraint(equalTo: bannerView.bottomAnchor, constant: -18)
         ])
     }
 }

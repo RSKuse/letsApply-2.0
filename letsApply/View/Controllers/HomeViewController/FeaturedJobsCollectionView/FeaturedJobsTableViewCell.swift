@@ -21,11 +21,11 @@ class FeaturedJobsTableViewCell: UITableViewCell, UICollectionViewDataSource, UI
     private lazy var featuredJobsCollectionView: UICollectionView = {
         let layout = UICollectionViewFlowLayout()
         layout.scrollDirection = .horizontal
-        layout.minimumLineSpacing = 18
+        layout.minimumLineSpacing = 12
 
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.contentInset = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
-        collectionView.backgroundColor = .white
+        collectionView.backgroundColor = AppTheme.background
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.dataSource = self
         collectionView.delegate = self
@@ -48,8 +48,8 @@ class FeaturedJobsTableViewCell: UITableViewCell, UICollectionViewDataSource, UI
 
     private func setupUI() {
         selectionStyle = .none
-        backgroundColor = .white
-        contentView.backgroundColor = .white
+        backgroundColor = AppTheme.background
+        contentView.backgroundColor = AppTheme.background
 
         contentView.addSubview(featuredJobsCollectionView)
 
@@ -79,6 +79,6 @@ class FeaturedJobsTableViewCell: UITableViewCell, UICollectionViewDataSource, UI
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        return CGSize(width: 155, height: 215)
+        return CGSize(width: 172, height: 216)
     }
 }

@@ -23,6 +23,7 @@ class FirestoreService {
             UserProfile.CodingKeys.uid.rawValue: profile.uid,
             UserProfile.CodingKeys.name.rawValue: profile.name,
             UserProfile.CodingKeys.email.rawValue: profile.email,
+            UserProfile.CodingKeys.phone.rawValue: profile.phone,
             UserProfile.CodingKeys.location.rawValue: profile.location,
             UserProfile.CodingKeys.professionalSummary.rawValue: profile.professionalSummary,
             UserProfile.CodingKeys.jobTitle.rawValue: profile.jobTitle,
@@ -30,6 +31,10 @@ class FirestoreService {
             UserProfile.CodingKeys.qualifications.rawValue: profile.qualifications,
             UserProfile.CodingKeys.experience.rawValue: profile.experience,
             UserProfile.CodingKeys.education.rawValue: profile.education,
+            UserProfile.CodingKeys.workExperiences.rawValue: profile.workExperiences.map(workExperienceData),
+            UserProfile.CodingKeys.educationEntries.rawValue: profile.educationEntries.map(educationEntryData),
+            UserProfile.CodingKeys.qualificationEntries.rawValue: profile.qualificationEntries.map(qualificationEntryData),
+            UserProfile.CodingKeys.references.rawValue: profile.references.map(referenceData),
             UserProfile.CodingKeys.savedJobs.rawValue: profile.savedJobs,
             UserProfile.CodingKeys.isPremium.rawValue: profile.isPremium
         ]
@@ -164,6 +169,7 @@ class FirestoreService {
             uid: data[UserProfile.CodingKeys.uid.rawValue] as? String ?? fallbackUID,
             name: data[UserProfile.CodingKeys.name.rawValue] as? String ?? "Guest User",
             email: data[UserProfile.CodingKeys.email.rawValue] as? String ?? "",
+            phone: data[UserProfile.CodingKeys.phone.rawValue] as? String ?? "",
             location: data[UserProfile.CodingKeys.location.rawValue] as? String ?? "South Africa",
             profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String ?? data["profile_picture_url"] as? String,
             cvUrl: data[UserProfile.CodingKeys.cvUrl.rawValue] as? String ?? data["cv_url"] as? String,
@@ -174,9 +180,127 @@ class FirestoreService {
             qualifications: data[UserProfile.CodingKeys.qualifications.rawValue] as? [String] ?? [],
             experience: data[UserProfile.CodingKeys.experience.rawValue] as? String ?? "",
             education: data[UserProfile.CodingKeys.education.rawValue] as? String ?? "",
+            workExperiences: mapWorkExperiences(
+                from: data[UserProfile.CodingKeys.workExperiences.rawValue]
+            ),
+            educationEntries: mapEducationEntries(
+                from: data[UserProfile.CodingKeys.educationEntries.rawValue]
+            ),
+            qualificationEntries: mapQualificationEntries(
+                from: data[UserProfile.CodingKeys.qualificationEntries.rawValue]
+            ),
+            references: mapReferences(
+                from: data[UserProfile.CodingKeys.references.rawValue]
+            ),
             savedJobs: data[UserProfile.CodingKeys.savedJobs.rawValue] as? [String] ?? data["saved_jobs"] as? [String] ?? [],
             isPremium: data[UserProfile.CodingKeys.isPremium.rawValue] as? Bool ?? false
         )
+    }
+
+    private func workExperienceData(_ entry: CVWorkExperience) -> [String: Any] {
+        return [
+            "id": entry.id,
+            "jobTitle": entry.jobTitle,
+            "company": entry.company,
+            "location": entry.location,
+            "startDate": entry.startDate,
+            "endDate": entry.endDate,
+            "responsibilities": entry.responsibilities
+        ]
+    }
+
+    private func educationEntryData(_ entry: CVEducationEntry) -> [String: Any] {
+        return [
+            "id": entry.id,
+            "qualification": entry.qualification,
+            "institution": entry.institution,
+            "fieldOfStudy": entry.fieldOfStudy,
+            "startYear": entry.startYear,
+            "endYear": entry.endYear,
+            "details": entry.details
+        ]
+    }
+
+    private func qualificationEntryData(_ entry: CVQualificationEntry) -> [String: Any] {
+        return [
+            "id": entry.id,
+            "title": entry.title,
+            "issuer": entry.issuer,
+            "year": entry.year
+        ]
+    }
+
+    private func referenceData(_ entry: CVReference) -> [String: Any] {
+        return [
+            "id": entry.id,
+            "name": entry.name,
+            "jobTitle": entry.jobTitle,
+            "company": entry.company,
+            "relationship": entry.relationship,
+            "email": entry.email,
+            "phone": entry.phone
+        ]
+    }
+
+    private func mapWorkExperiences(from value: Any?) -> [CVWorkExperience] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+
+        return entries.map {
+            CVWorkExperience(
+                id: $0["id"] as? String ?? UUID().uuidString,
+                jobTitle: $0["jobTitle"] as? String ?? "",
+                company: $0["company"] as? String ?? "",
+                location: $0["location"] as? String ?? "",
+                startDate: $0["startDate"] as? String ?? "",
+                endDate: $0["endDate"] as? String ?? "",
+                responsibilities: $0["responsibilities"] as? [String] ?? []
+            )
+        }
+    }
+
+    private func mapEducationEntries(from value: Any?) -> [CVEducationEntry] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+
+        return entries.map {
+            CVEducationEntry(
+                id: $0["id"] as? String ?? UUID().uuidString,
+                qualification: $0["qualification"] as? String ?? "",
+                institution: $0["institution"] as? String ?? "",
+                fieldOfStudy: $0["fieldOfStudy"] as? String ?? "",
+                startYear: $0["startYear"] as? String ?? "",
+                endYear: $0["endYear"] as? String ?? "",
+                details: $0["details"] as? String ?? ""
+            )
+        }
+    }
+
+    private func mapQualificationEntries(from value: Any?) -> [CVQualificationEntry] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+
+        return entries.map {
+            CVQualificationEntry(
+                id: $0["id"] as? String ?? UUID().uuidString,
+                title: $0["title"] as? String ?? "",
+                issuer: $0["issuer"] as? String ?? "",
+                year: $0["year"] as? String ?? ""
+            )
+        }
+    }
+
+    private func mapReferences(from value: Any?) -> [CVReference] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+
+        return entries.map {
+            CVReference(
+                id: $0["id"] as? String ?? UUID().uuidString,
+                name: $0["name"] as? String ?? "",
+                jobTitle: $0["jobTitle"] as? String ?? "",
+                company: $0["company"] as? String ?? "",
+                relationship: $0["relationship"] as? String ?? "",
+                email: $0["email"] as? String ?? "",
+                phone: $0["phone"] as? String ?? ""
+            )
+        }
     }
 
     private func mapJob(from data: [String: Any], documentID: String) -> Job {
