@@ -176,7 +176,7 @@ struct UserProfile: Codable {
         }
 
         if qualifications.isEmpty && qualificationEntries.isEmpty {
-            fields.append("Certificates or qualifications")
+            fields.append("Certificates acquired")
         }
 
         if experience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

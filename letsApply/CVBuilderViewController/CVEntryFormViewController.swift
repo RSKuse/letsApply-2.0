@@ -107,7 +107,7 @@ final class CVEntryFormViewController: UIViewController {
                 helpText: "Use one clear achievement per line. Start with strong action words."
             )
         case .education:
-            addTextField(key: "qualification", label: "Qualification", placeholder: "Bachelor of Commerce")
+            addTextField(key: "qualification", label: "Degree or diploma", placeholder: "Bachelor of Commerce")
             addTextField(key: "institution", label: "Institution", placeholder: "University or college")
             addTextField(key: "fieldOfStudy", label: "Field of study", placeholder: "Public Management")
             addDateFields(startLabel: "Start year", endLabel: "End year")
@@ -118,7 +118,7 @@ final class CVEntryFormViewController: UIViewController {
         case .qualifications:
             addTextField(
                 key: "title",
-                label: "Certificate or qualification",
+                label: "Certificate acquired",
                 placeholder: "AWS Cloud Practitioner"
             )
             addTextField(key: "issuer", label: "Issuer", placeholder: "Amazon Web Services")
@@ -273,7 +273,7 @@ final class CVEntryFormViewController: UIViewController {
                 )
             )
         case .education:
-            guard require("qualification", message: "Add the qualification name."),
+            guard require("qualification", message: "Add the degree or diploma name."),
                   require("institution", message: "Add the institution.") else {
                 return nil
             }
@@ -290,7 +290,7 @@ final class CVEntryFormViewController: UIViewController {
                 )
             )
         case .qualifications:
-            guard require("title", message: "Add the certificate or qualification name.") else {
+            guard require("title", message: "Add the certificate name.") else {
                 return nil
             }
             return .qualification(

@@ -101,7 +101,7 @@ class AICareerService {
 
         let tailoredCVText = """
         \(userProfile.name)
-        \(userProfile.jobTitle)
+        \(job.title)
         \(userProfile.location)
 
         Professional Summary

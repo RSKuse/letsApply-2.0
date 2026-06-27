@@ -277,12 +277,12 @@ private final class CVPDFWriter {
         guard !entries.isEmpty else { return }
 
         ensureSpace(76)
-        drawSectionTitle("QUALIFICATIONS & CERTIFICATIONS")
+        drawSectionTitle("CERTIFICATES ACQUIRED")
 
         for (index, entry) in entries.enumerated() {
             if index > 0 {
                 currentY += 5
-                prepareForEntry(requiredHeight: 38, continuationTitle: "QUALIFICATIONS")
+                prepareForEntry(requiredHeight: 38, continuationTitle: "CERTIFICATES ACQUIRED")
             }
 
             let title = entry.title.isEmpty ? "Professional Qualification" : entry.title

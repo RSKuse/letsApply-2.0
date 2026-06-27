@@ -26,7 +26,7 @@ class OnboardingViewController: UIViewController {
         Slide(
             eyebrow: "BUILD",
             title: "Turn your experience into a strong profile",
-            description: "Keep your skills, education, qualifications, and career story ready in one place.",
+            description: "Keep your skills, education, certificates, and career story ready in one place.",
             metric: "ONE CAREER PROFILE",
             systemImageName: "person.text.rectangle.fill"
         ),
