@@ -17,8 +17,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = SplashViewController()
+        window.rootViewController = initialViewController()
         window.makeKeyAndVisible()
         self.window = window
+    }
+
+    private func initialViewController() -> UIViewController {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_SCREEN"] == "cv-studio" {
+            return UINavigationController(rootViewController: CVBuilderViewController())
+        }
+        #endif
+
+        return SplashViewController()
     }
 }

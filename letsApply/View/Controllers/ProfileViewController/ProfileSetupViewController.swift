@@ -145,7 +145,9 @@ class ProfileViewController: UIViewController {
 
     private lazy var cvStatusLabel: UILabel = {
         let label = UILabel()
-        label.text = AppFeatures.firebaseStorageUploadsEnabled ? "No CV uploaded yet" : "Using profile CV draft for now"
+        label.text = AppFeatures.firebaseStorageUploadsEnabled
+            ? "No CV uploaded yet"
+            : "Create and share a local PDF in CV Studio"
         label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -155,11 +157,12 @@ class ProfileViewController: UIViewController {
     private lazy var uploadCVButton: UIButton = {
         let button = makeSecondaryButton(title: AppFeatures.firebaseStorageUploadsEnabled ? "Upload CV PDF" : "PDF Upload Paused")
         button.addTarget(self, action: #selector(uploadCVTapped), for: .touchUpInside)
+        button.isHidden = !AppFeatures.firebaseStorageUploadsEnabled
         return button
     }()
 
     private lazy var cvButton: UIButton = {
-        let button = makeSecondaryButton(title: "CV Builder")
+        let button = makeSecondaryButton(title: "CV Studio")
         button.addTarget(self, action: #selector(openCVBuilder), for: .touchUpInside)
         return button
     }()

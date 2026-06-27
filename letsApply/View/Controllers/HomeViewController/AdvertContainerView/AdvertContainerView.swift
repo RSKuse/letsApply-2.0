@@ -16,7 +16,7 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
         layout.minimumLineSpacing = 0
 
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        collectionView.backgroundColor = .white
+        collectionView.backgroundColor = AppTheme.background
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.isPagingEnabled = true
         collectionView.dataSource = self
