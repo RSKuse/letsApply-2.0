@@ -26,6 +26,7 @@ class CVBuilderViewController: UIViewController {
             introStackView,
             templateCardView,
             profileCardView,
+            sectionsCardView,
             summaryCardView,
             localModeCardView,
             saveDraftButton,
@@ -63,6 +64,7 @@ class CVBuilderViewController: UIViewController {
 
     private lazy var templateCardView = makeCardView(backgroundColor: AppTheme.ink)
     private lazy var profileCardView = makeCardView()
+    private lazy var sectionsCardView = makeCardView()
     private lazy var summaryCardView = makeCardView()
     private lazy var localModeCardView = makeCardView(backgroundColor: AppTheme.mutedSurface)
 
@@ -106,16 +108,51 @@ class CVBuilderViewController: UIViewController {
         return label
     }()
 
-    private lazy var profileTitleLabel = makeSectionTitleLabel(text: "Profile Content")
+    private lazy var profileTitleLabel = makeSectionTitleLabel(text: "Contact Details")
 
     private lazy var profilePreviewLabel: UILabel = {
         let label = UILabel()
-        label.text = "Complete your profile to generate a stronger CV."
+        label.text = "Complete your profile to add contact details."
         label.font = UIFont.systemFont(ofSize: 14, weight: .medium)
         label.textColor = AppTheme.secondaryText
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
+    }()
+
+    private lazy var sectionsTitleLabel = makeSectionTitleLabel(text: "CV Sections")
+
+    private lazy var experienceButton = makeSectionButton(
+        section: .experience,
+        tag: 0
+    )
+
+    private lazy var educationButton = makeSectionButton(
+        section: .education,
+        tag: 1
+    )
+
+    private lazy var qualificationsButton = makeSectionButton(
+        section: .qualifications,
+        tag: 2
+    )
+
+    private lazy var referencesButton = makeSectionButton(
+        section: .references,
+        tag: 3
+    )
+
+    private lazy var sectionButtonsStackView: UIStackView = {
+        let stackView = UIStackView(arrangedSubviews: [
+            experienceButton,
+            educationButton,
+            qualificationsButton,
+            referencesButton
+        ])
+        stackView.axis = .vertical
+        stackView.spacing = 4
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        return stackView
     }()
 
     private lazy var summaryTitleLabel = makeSectionTitleLabel(text: "Professional Summary")
@@ -201,6 +238,7 @@ class CVBuilderViewController: UIViewController {
         setupUI()
         setupTemplateCard()
         setupProfileCard()
+        setupSectionsCard()
         setupSummaryCard()
         setupLocalModeCard()
         fetchProfile()
@@ -277,6 +315,34 @@ class CVBuilderViewController: UIViewController {
         ])
     }
 
+    private func setupSectionsCard() {
+        sectionsCardView.addSubview(sectionsTitleLabel)
+        sectionsCardView.addSubview(sectionButtonsStackView)
+
+        NSLayoutConstraint.activate([
+            sectionsTitleLabel.topAnchor.constraint(equalTo: sectionsCardView.topAnchor, constant: 16),
+            sectionsTitleLabel.leadingAnchor.constraint(equalTo: sectionsCardView.leadingAnchor, constant: 16),
+            sectionsTitleLabel.trailingAnchor.constraint(equalTo: sectionsCardView.trailingAnchor, constant: -16),
+
+            sectionButtonsStackView.topAnchor.constraint(
+                equalTo: sectionsTitleLabel.bottomAnchor,
+                constant: 8
+            ),
+            sectionButtonsStackView.leadingAnchor.constraint(
+                equalTo: sectionsCardView.leadingAnchor,
+                constant: 8
+            ),
+            sectionButtonsStackView.trailingAnchor.constraint(
+                equalTo: sectionsCardView.trailingAnchor,
+                constant: -8
+            ),
+            sectionButtonsStackView.bottomAnchor.constraint(
+                equalTo: sectionsCardView.bottomAnchor,
+                constant: -8
+            )
+        ])
+    }
+
     private func setupSummaryCard() {
         summaryCardView.addSubview(summaryTitleLabel)
         summaryCardView.addSubview(summaryTextView)
@@ -343,29 +409,60 @@ class CVBuilderViewController: UIViewController {
             ? "Professional summary"
             : profile.professionalSummary
         profilePreviewLabel.text = cvPreviewText(for: profile)
+        updateSectionButtons(for: profile)
         previewButton.isEnabled = true
         openDebugPreviewIfNeeded()
     }
 
     private func cvPreviewText(for profile: UserProfile) -> String {
-        let skillsText = profile.skills.isEmpty
-            ? "Skills still needed"
-            : "\(profile.skills.count) skills ready"
-        let qualificationsText = profile.qualifications.isEmpty
-            ? "Qualifications still needed"
-            : "\(profile.qualifications.count) qualifications ready"
-
         return [
             profile.name,
             profile.jobTitle,
+            profile.email,
+            profile.phone,
             profile.location,
-            skillsText,
-            qualificationsText,
-            profile.experience.isEmpty ? "Experience still needed" : "Experience ready",
-            profile.education.isEmpty ? "Education still needed" : "Education ready"
         ]
         .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         .joined(separator: "\n")
+    }
+
+    private func updateSectionButtons(for profile: UserProfile) {
+        let experienceStatus: String
+        if !profile.workExperiences.isEmpty {
+            experienceStatus = entryCount(profile.workExperiences.count, singular: "role")
+        } else if !profile.experience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            experienceStatus = "Review imported profile text"
+        } else {
+            experienceStatus = "Add your employment history"
+        }
+
+        let educationStatus: String
+        if !profile.educationEntries.isEmpty {
+            educationStatus = entryCount(profile.educationEntries.count, singular: "entry")
+        } else if !profile.education.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            educationStatus = "Review imported profile text"
+        } else {
+            educationStatus = "Add your education history"
+        }
+
+        let qualificationCount = profile.qualificationEntries.isEmpty
+            ? profile.qualifications.count
+            : profile.qualificationEntries.count
+        let qualificationStatus = qualificationCount == 0
+            ? "Add certificates and registrations"
+            : entryCount(qualificationCount, singular: "item")
+        let referenceStatus = profile.references.isEmpty
+            ? "Available on request"
+            : entryCount(profile.references.count, singular: "reference")
+
+        experienceButton.configuration?.subtitle = experienceStatus
+        educationButton.configuration?.subtitle = educationStatus
+        qualificationsButton.configuration?.subtitle = qualificationStatus
+        referencesButton.configuration?.subtitle = referenceStatus
+    }
+
+    private func entryCount(_ count: Int, singular: String) -> String {
+        return "\(count) \(singular)\(count == 1 ? "" : "s")"
     }
 
     private func updateProfileSummary() {
@@ -385,13 +482,17 @@ class CVBuilderViewController: UIViewController {
 
     #if DEBUG
     private func loadDebugProfileIfNeeded() -> Bool {
-        guard ProcessInfo.processInfo.environment["LETSAPPLY_AUTO_PREVIEW_CV"] == "1" else {
+        let environment = ProcessInfo.processInfo.environment
+        let shouldLoadProfile = environment["LETSAPPLY_DEBUG_PROFILE"] == "1"
+            || environment["LETSAPPLY_AUTO_PREVIEW_CV"] == "1"
+        guard shouldLoadProfile else {
             return false
         }
 
         let profile = UserProfile(
             name: "Amina Ndlovu",
             email: "amina@example.com",
+            phone: "+27 00 000 0000",
             location: "Johannesburg, South Africa",
             professionalSummary: """
             Accomplished Senior Software Engineer with over a decade of experience building \
@@ -422,7 +523,78 @@ class CVBuilderViewController: UIViewController {
             databases, and distributed systems.
 
             Additional Training: iOS development, cloud computing, and product design.
-            """
+            """,
+            workExperiences: [
+                CVWorkExperience(
+                    jobTitle: "Senior Software Developer",
+                    company: "Ubuntu Digital",
+                    location: "Johannesburg",
+                    startDate: "Jan 2023",
+                    endDate: "Present",
+                    responsibilities: [
+                        "Led delivery of secure UIKit applications used by national teams.",
+                        "Improved release stability through code reviews and automated checks."
+                    ]
+                ),
+                CVWorkExperience(
+                    jobTitle: "iOS Developer",
+                    company: "Future Systems",
+                    location: "Durban",
+                    startDate: "Mar 2020",
+                    endDate: "Dec 2022",
+                    responsibilities: [
+                        "Built reusable UIKit components and integrated Firebase services.",
+                        "Worked with product and design teams to simplify core user journeys."
+                    ]
+                )
+            ],
+            educationEntries: [
+                CVEducationEntry(
+                    qualification: "Bachelor of Computer Science",
+                    institution: "University of Johannesburg",
+                    fieldOfStudy: "Software Engineering",
+                    startYear: "2016",
+                    endYear: "2019"
+                )
+            ],
+            qualificationEntries: [
+                CVQualificationEntry(
+                    title: "AWS Cloud Practitioner",
+                    issuer: "Amazon Web Services",
+                    year: "2025"
+                ),
+                CVQualificationEntry(
+                    title: "Agile Project Management",
+                    issuer: "Professional Development Institute",
+                    year: "2024"
+                )
+            ],
+            references: [
+                CVReference(
+                    name: "Dr Naledi Mokoena",
+                    jobTitle: "Engineering Director",
+                    company: "Ubuntu Digital",
+                    relationship: "Former manager",
+                    email: "naledi@example.com",
+                    phone: "+27 00 000 0000"
+                ),
+                CVReference(
+                    name: "Thabo Dlamini",
+                    jobTitle: "Senior Product Manager",
+                    company: "Future Systems",
+                    relationship: "Former colleague",
+                    email: "thabo@example.com",
+                    phone: "+27 00 000 0001"
+                ),
+                CVReference(
+                    name: "Lerato Molefe",
+                    jobTitle: "Programme Lead",
+                    company: "Digital Skills Africa",
+                    relationship: "Professional mentor",
+                    email: "lerato@example.com",
+                    phone: "+27 00 000 0002"
+                )
+            ]
         )
         configure(with: profile)
         return true
@@ -446,6 +618,80 @@ class CVBuilderViewController: UIViewController {
         label.textColor = .label
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
+    }
+
+    private func makeSectionButton(section: CVSectionKind, tag: Int) -> UIButton {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.title = section.title
+        configuration.subtitle = "Loading..."
+        configuration.image = UIImage(systemName: section.iconName)
+        configuration.imagePadding = 14
+        configuration.imagePlacement = .leading
+        configuration.baseForegroundColor = .label
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            incoming in
+            var outgoing = incoming
+            outgoing.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+            return outgoing
+        }
+        configuration.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            incoming in
+            var outgoing = incoming
+            outgoing.font = UIFont.systemFont(ofSize: 12, weight: .medium)
+            outgoing.foregroundColor = AppTheme.secondaryText
+            return outgoing
+        }
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 12,
+            leading: 12,
+            bottom: 12,
+            trailing: 12
+        )
+        button.configuration = configuration
+        button.contentHorizontalAlignment = .leading
+        button.tag = tag
+        button.layer.cornerRadius = AppTheme.cardRadius
+        button.backgroundColor = AppTheme.background
+        button.heightAnchor.constraint(equalToConstant: 68).isActive = true
+        button.addTarget(self, action: #selector(sectionButtonTapped(_:)), for: .touchUpInside)
+
+        let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
+        chevron.tintColor = AppTheme.secondaryText
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(chevron)
+        NSLayoutConstraint.activate([
+            chevron.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            chevron.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -14)
+        ])
+        return button
+    }
+
+    @objc private func sectionButtonTapped(_ sender: UIButton) {
+        guard CVSectionKind.allCases.indices.contains(sender.tag) else { return }
+        let section = CVSectionKind.allCases[sender.tag]
+        let editorViewController = CVSectionEditorViewController(
+            section: section,
+            profile: currentProfile
+        )
+        editorViewController.onProfileChanged = { [weak self] profile in
+            self?.currentProfile = profile
+            self?.updateSectionButtons(for: profile)
+            self?.saveStructuredProfile(profile)
+        }
+        navigationController?.pushViewController(editorViewController, animated: true)
+    }
+
+    private func saveStructuredProfile(_ profile: UserProfile) {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else { return }
+
+        firestoreService.saveUserProfile(profile) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error {
+                    self?.showAlert(title: "CV Section Not Saved", message: error.localizedDescription)
+                }
+            }
+        }
     }
 
     @objc private func previewCVTapped() {

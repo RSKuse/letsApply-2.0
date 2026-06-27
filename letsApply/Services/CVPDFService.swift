@@ -68,7 +68,7 @@ private final class CVPDFWriter {
     private let pageBounds: CGRect
     private let profile: UserProfile
     private let margin: CGFloat = 44
-    private let bottomLimit: CGFloat = 742
+    private let bottomLimit: CGFloat = 756
     private var currentY: CGFloat = 0
     private var pageNumber = 0
 
@@ -93,14 +93,15 @@ private final class CVPDFWriter {
         startPage(isFirstPage: true)
 
         drawSection(
-            title: "PROFESSIONAL PROFILE",
+            title: "PROFESSIONAL SUMMARY",
             text: profile.professionalSummary,
             fallback: "Professional profile available on request."
         )
         drawInlineListSection(title: "CORE SKILLS", items: profile.skills)
-        drawSection(title: "EDUCATION", text: profile.education)
-        drawListSection(title: "QUALIFICATIONS", items: profile.qualifications)
-        drawSection(title: "EXPERIENCE", text: profile.experience)
+        drawWorkExperienceSection()
+        drawEducationSection()
+        drawQualificationsSection()
+        drawReferencesSection()
     }
 
     private func startPage(isFirstPage: Bool) {
@@ -109,7 +110,7 @@ private final class CVPDFWriter {
 
         if isFirstPage {
             drawFirstPageHeader()
-            currentY = 190
+            currentY = 132
         } else {
             drawContinuationHeader()
             currentY = 78
@@ -120,14 +121,14 @@ private final class CVPDFWriter {
 
     private func drawFirstPageHeader() {
         inkColor.setFill()
-        context.cgContext.fill(CGRect(x: 0, y: 0, width: pageBounds.width, height: 162))
+        context.cgContext.fill(CGRect(x: 0, y: 0, width: pageBounds.width, height: 116))
 
         brandColor.setFill()
-        context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: 162))
+        context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: 116))
 
         draw(
             profile.name.uppercased(),
-            in: CGRect(x: margin, y: 34, width: pageBounds.width - (margin * 2), height: 38),
+            in: CGRect(x: margin, y: 12, width: pageBounds.width - (margin * 2), height: 38),
             font: UIFont.systemFont(ofSize: 26, weight: .bold),
             color: .white,
             lineHeight: 30
@@ -136,20 +137,20 @@ private final class CVPDFWriter {
         let jobTitle = profile.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         draw(
             jobTitle.isEmpty ? "PROFESSIONAL CANDIDATE" : jobTitle.uppercased(),
-            in: CGRect(x: margin, y: 76, width: pageBounds.width - (margin * 2), height: 24),
+            in: CGRect(x: margin, y: 47, width: pageBounds.width - (margin * 2), height: 24),
             font: UIFont.systemFont(ofSize: 13, weight: .bold),
             color: accentColor,
             lineHeight: 18
         )
 
-        let contactLine = [profile.email, profile.location]
+        let contactLine = [profile.email, profile.phone, profile.location]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "  |  ")
 
         draw(
             contactLine,
-            in: CGRect(x: margin, y: 116, width: pageBounds.width - (margin * 2), height: 24),
+            in: CGRect(x: margin, y: 80, width: pageBounds.width - (margin * 2), height: 24),
             font: UIFont.systemFont(ofSize: 11, weight: .medium),
             color: UIColor.white.withAlphaComponent(0.78),
             lineHeight: 16
@@ -209,6 +210,196 @@ private final class CVPDFWriter {
         drawSection(title: title, text: text)
     }
 
+    private func drawWorkExperienceSection() {
+        let entries = profile.resolvedWorkExperiences
+        guard !entries.isEmpty else { return }
+
+        ensureSpace(82)
+        drawSectionTitle("WORK EXPERIENCE")
+
+        for (index, entry) in entries.enumerated() {
+            if index > 0 {
+                currentY += 5
+                prepareForEntry(requiredHeight: 70, continuationTitle: "WORK EXPERIENCE")
+            }
+
+            let title = entry.jobTitle.isEmpty ? "Professional Experience" : entry.jobTitle
+            drawEntryHeader(title: title, metadata: entry.dateRange)
+
+            let organisation = [entry.company, entry.location]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "  |  ")
+            drawEntrySecondaryLine(organisation)
+
+            for responsibility in entry.responsibilities {
+                let cleaned = sanitize(responsibility)
+                if !cleaned.isEmpty {
+                    drawParagraph("- \(cleaned)")
+                }
+            }
+        }
+
+        currentY += 2
+    }
+
+    private func drawEducationSection() {
+        let entries = profile.resolvedEducationEntries
+        guard !entries.isEmpty else { return }
+
+        ensureSpace(82)
+        drawSectionTitle("EDUCATION")
+
+        for (index, entry) in entries.enumerated() {
+            if index > 0 {
+                currentY += 5
+                prepareForEntry(requiredHeight: 62, continuationTitle: "EDUCATION")
+            }
+
+            let title = entry.qualification.isEmpty ? "Education" : entry.qualification
+            drawEntryHeader(title: title, metadata: entry.dateRange)
+
+            let institution = [entry.institution, entry.fieldOfStudy]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "  |  ")
+            drawEntrySecondaryLine(institution)
+
+            let details = sanitize(entry.details)
+            if !details.isEmpty {
+                drawParagraph(details)
+            }
+        }
+
+        currentY += 2
+    }
+
+    private func drawQualificationsSection() {
+        let entries = profile.resolvedQualificationEntries
+        guard !entries.isEmpty else { return }
+
+        ensureSpace(76)
+        drawSectionTitle("QUALIFICATIONS & CERTIFICATIONS")
+
+        for (index, entry) in entries.enumerated() {
+            if index > 0 {
+                currentY += 5
+                prepareForEntry(requiredHeight: 38, continuationTitle: "QUALIFICATIONS")
+            }
+
+            let title = entry.title.isEmpty ? "Professional Qualification" : entry.title
+            drawEntryHeader(title: title, metadata: entry.year)
+            drawEntrySecondaryLine(entry.issuer)
+        }
+
+        currentY += 2
+    }
+
+    private func drawReferencesSection() {
+        guard !profile.references.isEmpty else {
+            drawSection(title: "REFERENCES", text: "Available upon request.")
+            return
+        }
+
+        let referenceBlockHeight = 34 + (CGFloat(profile.references.count) * 62)
+        ensureSpace(referenceBlockHeight)
+        drawSectionTitle("REFERENCES")
+
+        for (index, reference) in profile.references.enumerated() {
+            if index > 0 {
+                currentY += 5
+                prepareForEntry(requiredHeight: 62, continuationTitle: "REFERENCES")
+            }
+
+            drawEntryHeader(title: reference.name, metadata: reference.relationship)
+
+            let role = [reference.jobTitle, reference.company]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "  |  ")
+            drawEntrySecondaryLine(role)
+
+            let contact = [reference.email, reference.phone]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "  |  ")
+            if !contact.isEmpty {
+                drawParagraph(contact)
+            }
+        }
+
+        currentY += 2
+    }
+
+    private func prepareForEntry(requiredHeight: CGFloat, continuationTitle: String) {
+        guard currentY + requiredHeight > bottomLimit else { return }
+        startPage(isFirstPage: false)
+        drawSectionTitle("\(continuationTitle) CONTINUED")
+    }
+
+    private func drawEntryHeader(title: String, metadata: String) {
+        let cleanTitle = sanitize(title)
+        let cleanMetadata = sanitize(metadata)
+        let metadataWidth: CGFloat = cleanMetadata.isEmpty ? 0 : 150
+        let titleWidth = pageBounds.width - (margin * 2) - metadataWidth - 12
+        let font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        let titleHeight = textHeight(
+            for: cleanTitle,
+            font: font,
+            width: titleWidth,
+            lineHeight: 16
+        )
+        let rowHeight = max(18, ceil(titleHeight))
+
+        draw(
+            cleanTitle,
+            in: CGRect(x: margin, y: currentY, width: titleWidth, height: rowHeight + 2),
+            font: font,
+            color: inkColor,
+            lineHeight: 16
+        )
+
+        if !cleanMetadata.isEmpty {
+            draw(
+                cleanMetadata,
+                in: CGRect(
+                    x: pageBounds.width - margin - metadataWidth,
+                    y: currentY,
+                    width: metadataWidth,
+                    height: rowHeight + 2
+                ),
+                font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                color: secondaryColor,
+                lineHeight: 14,
+                alignment: .right
+            )
+        }
+
+        currentY += rowHeight + 3
+    }
+
+    private func drawEntrySecondaryLine(_ text: String) {
+        let cleanText = sanitize(text)
+        guard !cleanText.isEmpty else { return }
+        let font = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
+        let height = textHeight(
+            for: cleanText,
+            font: font,
+            width: pageBounds.width - (margin * 2),
+            lineHeight: 15
+        )
+
+        draw(
+            cleanText,
+            in: CGRect(
+                x: margin,
+                y: currentY,
+                width: pageBounds.width - (margin * 2),
+                height: height + 2
+            ),
+            font: font,
+            color: brandColor,
+            lineHeight: 15
+        )
+        currentY += ceil(height) + 4
+    }
+
     private func drawInlineListSection(title: String, items: [String]) {
         let text = items
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -226,23 +417,23 @@ private final class CVPDFWriter {
         ensureSpace(54)
         drawSectionTitle(title)
         drawPaginatedText(content)
-        currentY += 6
+        currentY += 2
     }
 
     private func drawSectionTitle(_ title: String) {
         sectionColor.setFill()
         context.cgContext.fill(
-            CGRect(x: margin, y: currentY, width: pageBounds.width - (margin * 2), height: 30)
+            CGRect(x: margin, y: currentY, width: pageBounds.width - (margin * 2), height: 26)
         )
 
         brandColor.setFill()
-        context.cgContext.fill(CGRect(x: margin, y: currentY, width: 5, height: 30))
+        context.cgContext.fill(CGRect(x: margin, y: currentY, width: 5, height: 26))
 
         draw(
             title,
             in: CGRect(
                 x: margin + 16,
-                y: currentY + 7,
+                y: currentY + 5,
                 width: pageBounds.width - (margin * 2) - 24,
                 height: 18
             ),
@@ -251,7 +442,7 @@ private final class CVPDFWriter {
             lineHeight: 15
         )
 
-        currentY += 38
+        currentY += 30
     }
 
     private func drawPaginatedText(_ text: String) {
@@ -269,7 +460,7 @@ private final class CVPDFWriter {
         var remainingWords = paragraph.split(whereSeparator: { $0.isWhitespace }).map(String.init)
 
         while !remainingWords.isEmpty {
-            if bottomLimit - currentY < 34 {
+            if bottomLimit - currentY < 22 {
                 startPage(isFirstPage: false)
             }
 
@@ -295,7 +486,7 @@ private final class CVPDFWriter {
                 lineHeight: 16
             )
 
-            currentY += ceil(height) + 5
+            currentY += ceil(height) + 4
             remainingWords.removeFirst(count)
         }
     }
@@ -326,15 +517,29 @@ private final class CVPDFWriter {
     }
 
     private func textHeight(for text: String) -> CGFloat {
+        return textHeight(
+            for: text,
+            font: bodyFont,
+            width: pageBounds.width - (margin * 2),
+            lineHeight: 16
+        )
+    }
+
+    private func textHeight(
+        for text: String,
+        font: UIFont,
+        width: CGFloat,
+        lineHeight: CGFloat
+    ) -> CGFloat {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.minimumLineHeight = 16
-        paragraphStyle.maximumLineHeight = 16
+        paragraphStyle.minimumLineHeight = lineHeight
+        paragraphStyle.maximumLineHeight = lineHeight
 
         return (text as NSString).boundingRect(
-            with: CGSize(width: pageBounds.width - (margin * 2), height: .greatestFiniteMagnitude),
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [
-                .font: bodyFont,
+                .font: font,
                 .paragraphStyle: paragraphStyle
             ],
             context: nil
