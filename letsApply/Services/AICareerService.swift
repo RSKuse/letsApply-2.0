@@ -180,8 +180,10 @@ class AICareerService {
             "Make sure the cover letter still sounds like you before submitting."
         ]
 
-        if userProfile.cvUrl == nil {
+        if userProfile.cvUrl == nil && AppFeatures.firebaseStorageUploadsEnabled {
             recommendations.insert("Upload your CV before submitting for a stronger application.", at: 0)
+        } else if userProfile.cvUrl == nil {
+            recommendations.insert("This package uses your profile CV draft while PDF uploads are paused.", at: 0)
         }
 
         if !missingSkills.isEmpty {

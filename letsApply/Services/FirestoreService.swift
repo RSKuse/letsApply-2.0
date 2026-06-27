@@ -329,6 +329,10 @@ class FirestoreService {
         job: Job,
         coverLetterText: String? = nil,
         isAIGenerated: Bool = false,
+        tailoredCVText: String? = nil,
+        recruiterEmailSubject: String? = nil,
+        recruiterEmailBody: String? = nil,
+        matchScore: Int? = nil,
         completion: @escaping (Result<Application, Error>) -> Void
     ) {
         guard !userProfile.uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -352,40 +356,31 @@ class FirestoreService {
         let applicationId = makeUserJobDocumentId(userId: userProfile.uid, jobId: jobId)
         let document = db.collection(FirebaseCollections.applications.rawValue).document(applicationId)
 
-        document.getDocument { snapshot, error in
+        let application = Application(
+            id: applicationId,
+            userId: userProfile.uid,
+            jobId: jobId,
+            jobTitle: job.title,
+            companyName: job.companyName,
+            appliedDate: Self.currentDateString(),
+            status: "submitted",
+            cvUrl: userProfile.cvUrl,
+            coverLetterText: coverLetterText,
+            isAIGenerated: isAIGenerated,
+            tailoredCVText: tailoredCVText,
+            recruiterEmailSubject: recruiterEmailSubject,
+            recruiterEmailBody: recruiterEmailBody,
+            matchScore: matchScore
+        )
+
+        document.setData(mapApplicationData(application), merge: false) { error in
             if let error = error {
-                completion(.failure(error))
-                return
-            }
-
-            if snapshot?.exists == true {
-                completion(.failure(NSError(
-                    domain: "ApplicationError",
-                    code: 409,
-                    userInfo: [NSLocalizedDescriptionKey: "You have already applied for this job."]
+                completion(.failure(self.makeFirestorePermissionError(
+                    fallback: "Firebase rules are blocking this application. Allow signed-in users to write their own applications, then try again.",
+                    error: error
                 )))
-                return
-            }
-
-            let application = Application(
-                id: applicationId,
-                userId: userProfile.uid,
-                jobId: jobId,
-                jobTitle: job.title,
-                companyName: job.companyName,
-                appliedDate: Self.currentDateString(),
-                status: "submitted",
-                cvUrl: userProfile.cvUrl,
-                coverLetterText: coverLetterText,
-                isAIGenerated: isAIGenerated
-            )
-
-            document.setData(self.mapApplicationData(application)) { error in
-                if let error = error {
-                    completion(.failure(error))
-                } else {
-                    completion(.success(application))
-                }
+            } else {
+                completion(.success(application))
             }
         }
     }
@@ -404,7 +399,10 @@ class FirestoreService {
             .whereField("userId", isEqualTo: userId)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    completion(.failure(error))
+                    completion(.failure(self.makeFirestorePermissionError(
+                        fallback: "Firebase rules are blocking your applications list. Allow signed-in users to read their own applications.",
+                        error: error
+                    )))
                     return
                 }
 
@@ -475,7 +473,10 @@ class FirestoreService {
             .whereField("userId", isEqualTo: userId)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    completion(.failure(error))
+                    completion(.failure(self.makeFirestorePermissionError(
+                        fallback: "Firebase rules are blocking your saved jobs list. Allow signed-in users to read their own saved jobs.",
+                        error: error
+                    )))
                     return
                 }
 
@@ -512,6 +513,22 @@ class FirestoreService {
             data["coverLetterText"] = coverLetterText
         }
 
+        if let tailoredCVText = application.tailoredCVText {
+            data["tailoredCVText"] = tailoredCVText
+        }
+
+        if let recruiterEmailSubject = application.recruiterEmailSubject {
+            data["recruiterEmailSubject"] = recruiterEmailSubject
+        }
+
+        if let recruiterEmailBody = application.recruiterEmailBody {
+            data["recruiterEmailBody"] = recruiterEmailBody
+        }
+
+        if let matchScore = application.matchScore {
+            data["matchScore"] = matchScore
+        }
+
         return data
     }
 
@@ -526,7 +543,11 @@ class FirestoreService {
             status: data["status"] as? String ?? "submitted",
             cvUrl: data["cvUrl"] as? String,
             coverLetterText: data["coverLetterText"] as? String,
-            isAIGenerated: data["isAIGenerated"] as? Bool
+            isAIGenerated: data["isAIGenerated"] as? Bool,
+            tailoredCVText: data["tailoredCVText"] as? String,
+            recruiterEmailSubject: data["recruiterEmailSubject"] as? String,
+            recruiterEmailBody: data["recruiterEmailBody"] as? String,
+            matchScore: data["matchScore"] as? Int
         )
     }
 
@@ -567,7 +588,7 @@ class FirestoreService {
             return
         }
 
-        let storageRef = storage.reference().child("profile_pictures/\(uid).jpg")
+        let storageRef = storage.reference().child("profile_pictures/\(uid)/profile.jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
 
@@ -651,13 +672,7 @@ class FirestoreService {
             }
 
             guard attemptsRemaining > 0 else {
-                completion(.failure(NSError(
-                    domain: "StorageDownloadURL",
-                    code: -1,
-                    userInfo: [
-                        NSLocalizedDescriptionKey: "Firebase Storage did not return the uploaded \(fileType) URL. Check Storage rules and try again. \(error?.localizedDescription ?? "")"
-                    ]
-                )))
+                completion(.failure(self.makeStorageUploadError(fileType: fileType, error: error)))
                 return
             }
 
@@ -670,5 +685,41 @@ class FirestoreService {
                 )
             }
         }
+    }
+
+    private func makeFirestorePermissionError(fallback: String, error: Error) -> Error {
+        let message = error.localizedDescription
+        guard message.localizedCaseInsensitiveContains("permission") else {
+            return error
+        }
+
+        return NSError(
+            domain: "FirestoreRules",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: fallback]
+        )
+    }
+
+    private func makeStorageUploadError(fileType: String, error: Error?) -> Error {
+        let rawMessage = error?.localizedDescription ?? ""
+        let fileName = fileType == "CV" ? "CV" : "profile photo"
+
+        if rawMessage.localizedCaseInsensitiveContains("object")
+            || rawMessage.localizedCaseInsensitiveContains("permission")
+            || rawMessage.localizedCaseInsensitiveContains("unauthorized") {
+            return NSError(
+                domain: "FirebaseStorageRules",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Firebase Storage is blocking or not confirming the uploaded \(fileName). Update Storage rules for profile_pictures and user_cvs, then try again."
+                ]
+            )
+        }
+
+        return error ?? NSError(
+            domain: "FirebaseStorage",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "The \(fileName) upload could not be completed. Please try again."]
+        )
     }
 }

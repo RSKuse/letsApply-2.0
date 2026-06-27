@@ -62,7 +62,7 @@ class ApplyConfirmationViewController: UIViewController {
     private lazy var applicationDetailsLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
 
     private lazy var uploadCVButton: UIButton = {
-        let button = makeSecondaryButton(title: "Upload CV PDF")
+        let button = makeSecondaryButton(title: AppFeatures.firebaseStorageUploadsEnabled ? "Upload CV PDF" : "Use CV Draft")
         button.addTarget(self, action: #selector(uploadCVTapped), for: .touchUpInside)
         return button
     }()
@@ -208,7 +208,7 @@ class ApplyConfirmationViewController: UIViewController {
         profileDetailsLabel.text = profileSummaryText()
         cvStatusLabel.text = cvStatusText()
         applicationDetailsLabel.text = applicationSummaryText()
-        submitButton.setTitle(userProfile.cvUrl == nil ? "Submit Without CV" : "Submit Application", for: .normal)
+        submitButton.setTitle(submitButtonTitle(), for: .normal)
     }
 
     private func profileSummaryText() -> String {
@@ -224,6 +224,10 @@ class ApplyConfirmationViewController: UIViewController {
     }
 
     private func cvStatusText() -> String {
+        if !AppFeatures.firebaseStorageUploadsEnabled {
+            return "Using your profile CV draft. PDF upload can be enabled later when Firebase Storage is available."
+        }
+
         if let fileName = userProfile.cvFileName, !fileName.isEmpty {
             return "CV attached: \(fileName)"
         }
@@ -233,6 +237,14 @@ class ApplyConfirmationViewController: UIViewController {
         }
 
         return "No CV attached"
+    }
+
+    private func submitButtonTitle() -> String {
+        if !AppFeatures.firebaseStorageUploadsEnabled {
+            return "Submit With Profile Draft"
+        }
+
+        return userProfile.cvUrl == nil ? "Submit Without CV" : "Submit Application"
     }
 
     private func applicationSummaryText() -> String {
@@ -281,6 +293,13 @@ class ApplyConfirmationViewController: UIViewController {
     }
 
     @objc private func uploadCVTapped() {
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            let cvVC = CVBuilderViewController()
+            cvVC.hidesBottomBarWhenPushed = true
+            navigationController?.pushViewController(cvVC, animated: true)
+            return
+        }
+
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.pdf], asCopy: true)
         documentPicker.delegate = self
         documentPicker.allowsMultipleSelection = false
@@ -322,7 +341,7 @@ class ApplyConfirmationViewController: UIViewController {
         submitButton.isEnabled = !submitting
         uploadCVButton.isEnabled = !submitting
         submitButton.backgroundColor = submitting ? .systemGray : .systemGreen
-        submitButton.setTitle(submitting ? "Submitting..." : (userProfile.cvUrl == nil ? "Submit Without CV" : "Submit Application"), for: .normal)
+        submitButton.setTitle(submitting ? "Submitting..." : submitButtonTitle(), for: .normal)
     }
 
     private func showSuccessAlert() {
@@ -353,6 +372,11 @@ class ApplyConfirmationViewController: UIViewController {
 extension ApplyConfirmationViewController: UIDocumentPickerDelegate {
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "PDF Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
+
         guard let fileURL = urls.first else { return }
 
         uploadCVButton.isEnabled = false

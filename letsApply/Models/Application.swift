@@ -16,6 +16,10 @@ struct Application: Codable {
     var cvUrl: String?
     var coverLetterText: String?
     var isAIGenerated: Bool?
+    var tailoredCVText: String?
+    var recruiterEmailSubject: String?
+    var recruiterEmailBody: String?
+    var matchScore: Int?
 }
 
 struct SavedJob: Codable {

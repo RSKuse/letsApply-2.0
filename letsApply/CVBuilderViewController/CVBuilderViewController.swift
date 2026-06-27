@@ -23,7 +23,7 @@ class CVBuilderViewController: UIViewController {
 
     private lazy var subtitleLabel: UILabel = {
         let label = UILabel()
-        label.text = "Upload your real CV and keep a clean profile-based draft ready for applications."
+        label.text = "Keep a clean profile-based CV draft ready for applications."
         label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -33,7 +33,7 @@ class CVBuilderViewController: UIViewController {
 
     private lazy var cvStatusLabel: UILabel = {
         let label = UILabel()
-        label.text = "No CV uploaded yet"
+        label.text = AppFeatures.firebaseStorageUploadsEnabled ? "No CV uploaded yet" : "Using profile CV draft for now"
         label.font = UIFont.systemFont(ofSize: 15, weight: .bold)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -43,7 +43,7 @@ class CVBuilderViewController: UIViewController {
 
     private lazy var uploadCVButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setTitle("Upload CV PDF", for: .normal)
+        button.setTitle(AppFeatures.firebaseStorageUploadsEnabled ? "Upload CV PDF" : "PDF Upload Paused", for: .normal)
         button.setTitleColor(.white, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
         button.backgroundColor = .systemGreen
@@ -95,7 +95,15 @@ class CVBuilderViewController: UIViewController {
         view.backgroundColor = .systemBackground
         title = "CV"
         setupUI()
+        configureStorageMode()
         fetchProfile()
+    }
+
+    private func configureStorageMode() {
+        guard !AppFeatures.firebaseStorageUploadsEnabled else { return }
+
+        uploadCVButton.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+        uploadCVButton.setTitleColor(.systemGreen, for: .normal)
     }
 
     private func setupUI() {
@@ -144,7 +152,7 @@ class CVBuilderViewController: UIViewController {
 
     private func fetchProfile() {
         guard let user = Auth.auth().currentUser, !user.isAnonymous else {
-            cvStatusLabel.text = "Create a profile to upload and manage your CV."
+            cvStatusLabel.text = "Create a profile to build and manage your CV draft."
             uploadCVButton.isEnabled = false
             return
         }
@@ -155,12 +163,20 @@ class CVBuilderViewController: UIViewController {
 
                 if case .success(let profile) = result {
                     self.currentProfile = profile
-                    self.cvStatusLabel.text = profile.cvFileName.map { "CV uploaded: \($0)" } ?? "No CV uploaded yet"
+                    self.cvStatusLabel.text = self.cvStatusText(for: profile)
                     self.summaryTextView.text = profile.professionalSummary.isEmpty ? "Professional summary" : profile.professionalSummary
                     self.profilePreviewLabel.text = self.cvPreviewText(for: profile)
                 }
             }
         }
+    }
+
+    private func cvStatusText(for profile: UserProfile) -> String {
+        if !AppFeatures.firebaseStorageUploadsEnabled {
+            return "Firebase Storage is paused. Applications will use your profile CV draft."
+        }
+
+        return profile.cvFileName.map { "CV uploaded: \($0)" } ?? "No CV uploaded yet"
     }
 
     private func cvPreviewText(for profile: UserProfile) -> String {
@@ -178,6 +194,11 @@ class CVBuilderViewController: UIViewController {
     }
 
     @objc private func uploadCVTapped() {
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "PDF Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
+
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.pdf], asCopy: true)
         documentPicker.delegate = self
         documentPicker.allowsMultipleSelection = false
@@ -216,6 +237,11 @@ class CVBuilderViewController: UIViewController {
 extension CVBuilderViewController: UIDocumentPickerDelegate {
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "PDF Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
+
         guard let user = Auth.auth().currentUser, !user.isAnonymous, let fileURL = urls.first else { return }
 
         uploadCVButton.isEnabled = false

@@ -26,11 +26,13 @@ class AutoApplyAssistantViewController: UIViewController {
 
     private lazy var contentStackView: UIStackView = {
         let stackView = UIStackView(arrangedSubviews: [
+            jobCardView,
             matchCardView,
             recommendationsCardView,
             cvCardView,
             coverLetterCardView,
-            emailCardView
+            emailCardView,
+            approvalCardView
         ])
         stackView.axis = .vertical
         stackView.spacing = 16
@@ -38,11 +40,16 @@ class AutoApplyAssistantViewController: UIViewController {
         return stackView
     }()
 
+    private lazy var jobCardView = makeCardView()
     private lazy var matchCardView = makeCardView()
     private lazy var recommendationsCardView = makeCardView()
     private lazy var cvCardView = makeCardView()
     private lazy var coverLetterCardView = makeCardView()
     private lazy var emailCardView = makeCardView()
+    private lazy var approvalCardView = makeCardView()
+
+    private lazy var jobTitleLabel = makeSectionTitleLabel(text: "Application Package")
+    private lazy var jobSummaryLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .semibold), color: .secondaryLabel, lines: 0)
 
     private lazy var scoreLabel: UILabel = {
         let label = makeLabel(font: UIFont.systemFont(ofSize: 42, weight: .bold), color: .systemGreen, lines: 1)
@@ -51,13 +58,15 @@ class AutoApplyAssistantViewController: UIViewController {
         return label
     }()
 
-    private lazy var matchTitleLabel = makeSectionTitleLabel(text: "Auto Apply Assistant")
+    private lazy var matchTitleLabel = makeSectionTitleLabel(text: "Job Fit")
     private lazy var matchSummaryLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
     private lazy var recommendationsTitleLabel = makeSectionTitleLabel(text: "Recommendations")
     private lazy var recommendationsLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
     private lazy var cvTitleLabel = makeSectionTitleLabel(text: "Tailored CV Draft")
     private lazy var coverLetterTitleLabel = makeSectionTitleLabel(text: "Cover Letter")
     private lazy var emailTitleLabel = makeSectionTitleLabel(text: "Recruiter Email Draft")
+    private lazy var approvalTitleLabel = makeSectionTitleLabel(text: "Final Approval")
+    private lazy var approvalLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
 
     private lazy var cvTextView = makeTextView()
     private lazy var coverLetterTextView = makeTextView()
@@ -65,7 +74,7 @@ class AutoApplyAssistantViewController: UIViewController {
 
     private lazy var approveButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setTitle("Approve & Submit", for: .normal)
+        button.setTitle("Approve & Submit Application", for: .normal)
         button.setTitleColor(.white, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
         button.backgroundColor = .systemGray
@@ -89,7 +98,7 @@ class AutoApplyAssistantViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
-        title = "Auto Apply"
+        title = "Review Package"
         setupUI()
         configureLoadingState()
         preparePackage()
@@ -100,11 +109,13 @@ class AutoApplyAssistantViewController: UIViewController {
         view.addSubview(approveButton)
         scrollView.addSubview(contentStackView)
 
+        setupJobCard()
         setupMatchCard()
         setupRecommendationsCard()
         setupCVCard()
         setupCoverLetterCard()
         setupEmailCard()
+        setupApprovalCard()
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -122,6 +133,22 @@ class AutoApplyAssistantViewController: UIViewController {
             approveButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             approveButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
             approveButton.heightAnchor.constraint(equalToConstant: 54)
+        ])
+    }
+
+    private func setupJobCard() {
+        jobCardView.addSubview(jobTitleLabel)
+        jobCardView.addSubview(jobSummaryLabel)
+
+        NSLayoutConstraint.activate([
+            jobTitleLabel.topAnchor.constraint(equalTo: jobCardView.topAnchor, constant: 16),
+            jobTitleLabel.leadingAnchor.constraint(equalTo: jobCardView.leadingAnchor, constant: 16),
+            jobTitleLabel.trailingAnchor.constraint(equalTo: jobCardView.trailingAnchor, constant: -16),
+
+            jobSummaryLabel.topAnchor.constraint(equalTo: jobTitleLabel.bottomAnchor, constant: 10),
+            jobSummaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
+            jobSummaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
+            jobSummaryLabel.bottomAnchor.constraint(equalTo: jobCardView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -213,12 +240,30 @@ class AutoApplyAssistantViewController: UIViewController {
         ])
     }
 
+    private func setupApprovalCard() {
+        approvalCardView.addSubview(approvalTitleLabel)
+        approvalCardView.addSubview(approvalLabel)
+
+        NSLayoutConstraint.activate([
+            approvalTitleLabel.topAnchor.constraint(equalTo: approvalCardView.topAnchor, constant: 16),
+            approvalTitleLabel.leadingAnchor.constraint(equalTo: approvalCardView.leadingAnchor, constant: 16),
+            approvalTitleLabel.trailingAnchor.constraint(equalTo: approvalCardView.trailingAnchor, constant: -16),
+
+            approvalLabel.topAnchor.constraint(equalTo: approvalTitleLabel.bottomAnchor, constant: 10),
+            approvalLabel.leadingAnchor.constraint(equalTo: approvalTitleLabel.leadingAnchor),
+            approvalLabel.trailingAnchor.constraint(equalTo: approvalTitleLabel.trailingAnchor),
+            approvalLabel.bottomAnchor.constraint(equalTo: approvalCardView.bottomAnchor, constant: -16)
+        ])
+    }
+
     private func configureLoadingState() {
+        jobSummaryLabel.text = "\(job.title)\n\(job.companyName)\n\(job.locationText)"
         matchSummaryLabel.text = "Preparing your job fit score, tailored CV, cover letter, and email draft."
         recommendationsLabel.text = "Loading recommendations..."
         cvTextView.text = "Preparing tailored CV draft..."
         coverLetterTextView.text = "Preparing cover letter..."
         emailTextView.text = "Preparing email draft..."
+        approvalLabel.text = approvalText()
     }
 
     private func preparePackage() {
@@ -292,6 +337,28 @@ class AutoApplyAssistantViewController: UIViewController {
         return items.map { "- \($0)" }.joined(separator: "\n")
     }
 
+    private func approvalText() -> String {
+        if AppFeatures.firebaseStorageUploadsEnabled {
+            return "Review every section. When you approve, Let’s Apply stores the submitted package in your application tracker."
+        }
+
+        return "Review every section. PDF upload is paused on the free plan, so this application will use your profile CV draft, cover letter, and recruiter email text."
+    }
+
+    private func emailDraftParts() -> (subject: String?, body: String?) {
+        let text = emailTextView.text ?? ""
+        let prefix = "Subject:"
+
+        guard text.hasPrefix(prefix), let bodyRange = text.range(of: "\n\n") else {
+            return (nil, text)
+        }
+
+        let subjectStart = text.index(text.startIndex, offsetBy: prefix.count)
+        let subject = String(text[subjectStart..<bodyRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = String(text[bodyRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (subject, body)
+    }
+
     @objc private func approveTapped() {
         guard !isSubmitting else { return }
         guard autoApplyPackage != nil else {
@@ -306,7 +373,7 @@ class AutoApplyAssistantViewController: UIViewController {
 
         let alert = UIAlertController(
             title: "Approve Application",
-            message: "This will submit the reviewed application package. Let’s Apply will not send anything until you approve.",
+            message: "This will submit the reviewed package to your application tracker. Let’s Apply will not send anything until you approve.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Submit", style: .default) { [weak self] _ in
@@ -318,12 +385,17 @@ class AutoApplyAssistantViewController: UIViewController {
 
     private func submitApprovedPackage() {
         setSubmitting(true)
+        let emailDraft = emailDraftParts()
 
         firestoreService.createApplication(
             userProfile: userProfile,
             job: job,
             coverLetterText: coverLetterTextView.text,
-            isAIGenerated: true
+            isAIGenerated: true,
+            tailoredCVText: cvTextView.text,
+            recruiterEmailSubject: emailDraft.subject,
+            recruiterEmailBody: emailDraft.body,
+            matchScore: autoApplyPackage?.matchScore
         ) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -344,13 +416,13 @@ class AutoApplyAssistantViewController: UIViewController {
         isSubmitting = submitting
         approveButton.isEnabled = !submitting
         approveButton.backgroundColor = submitting ? .systemGray : .systemGreen
-        approveButton.setTitle(submitting ? "Submitting..." : "Approve & Submit", for: .normal)
+        approveButton.setTitle(submitting ? "Submitting..." : "Approve & Submit Application", for: .normal)
     }
 
     private func showSuccessAlert() {
         let alert = UIAlertController(
             title: "Application Submitted",
-            message: "Your AI-assisted application package has been submitted and added to your tracker.",
+            message: "Your reviewed application package has been added to your tracker.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "View Applications", style: .default) { [weak self] _ in

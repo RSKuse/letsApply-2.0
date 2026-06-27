@@ -25,7 +25,7 @@ class ProfilePictureService {
             return
         }
         
-        let storageRef = Storage.storage().reference().child("profile_pictures/\(uid).jpg")
+        let storageRef = Storage.storage().reference().child("profile_pictures/\(uid)/profile.jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
         

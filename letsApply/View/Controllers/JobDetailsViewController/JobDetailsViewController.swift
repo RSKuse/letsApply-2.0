@@ -260,7 +260,7 @@ class JobDetailsViewController: UIViewController {
             applyButton.backgroundColor = .systemGray
             applyButton.isEnabled = false
         } else {
-            applyButton.setTitle("Apply Now", for: .normal)
+            applyButton.setTitle("Review Application", for: .normal)
             applyButton.backgroundColor = .systemGreen
             applyButton.isEnabled = true
         }
@@ -370,7 +370,7 @@ class JobDetailsViewController: UIViewController {
                         return
                     }
 
-                    self.openApplyConfirmation(profile: profile)
+                    self.openApplicationPackageReview(profile: profile)
                 case .failure(let error):
                     self.showAlert(title: "Profile Error", message: error.localizedDescription)
                 }
@@ -378,14 +378,14 @@ class JobDetailsViewController: UIViewController {
         }
     }
 
-    private func openApplyConfirmation(profile: UserProfile) {
-        let applyVC = ApplyConfirmationViewController(job: job, userProfile: profile)
-        applyVC.hidesBottomBarWhenPushed = true
-        applyVC.onApplicationSubmitted = { [weak self] in
+    private func openApplicationPackageReview(profile: UserProfile) {
+        let reviewVC = AutoApplyAssistantViewController(job: job, userProfile: profile)
+        reviewVC.hidesBottomBarWhenPushed = true
+        reviewVC.onApplicationSubmitted = { [weak self] in
             self?.hasApplied = true
             self?.updateApplyButton()
         }
-        navigationController?.pushViewController(applyVC, animated: true)
+        navigationController?.pushViewController(reviewVC, animated: true)
     }
 
     @objc private func saveTapped() {
@@ -444,11 +444,6 @@ class JobDetailsViewController: UIViewController {
 
         guard profile.isComplete else {
             showProfileCompletionPrompt(missingFields: profile.missingRequiredFields)
-            return
-        }
-
-        guard profile.isPremium else {
-            showAlert(title: "Premium Required", message: "Auto Apply Assistant is a premium career tool.")
             return
         }
 

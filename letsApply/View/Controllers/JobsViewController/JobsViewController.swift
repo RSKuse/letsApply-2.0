@@ -48,6 +48,7 @@ class JobsViewController: UIViewController {
     private lazy var filterStackView: UIStackView = {
         let stackView = UIStackView()
         stackView.axis = .horizontal
+        stackView.alignment = .center
         stackView.spacing = 10
         stackView.translatesAutoresizingMaskIntoConstraints = false
         return stackView

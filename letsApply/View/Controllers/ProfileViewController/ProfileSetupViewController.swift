@@ -145,7 +145,7 @@ class ProfileViewController: UIViewController {
 
     private lazy var cvStatusLabel: UILabel = {
         let label = UILabel()
-        label.text = "No CV uploaded yet"
+        label.text = AppFeatures.firebaseStorageUploadsEnabled ? "No CV uploaded yet" : "Using profile CV draft for now"
         label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -153,7 +153,7 @@ class ProfileViewController: UIViewController {
     }()
 
     private lazy var uploadCVButton: UIButton = {
-        let button = makeSecondaryButton(title: "Upload CV PDF")
+        let button = makeSecondaryButton(title: AppFeatures.firebaseStorageUploadsEnabled ? "Upload CV PDF" : "PDF Upload Paused")
         button.addTarget(self, action: #selector(uploadCVTapped), for: .touchUpInside)
         return button
     }()
@@ -410,7 +410,7 @@ class ProfileViewController: UIViewController {
         experienceTextField.text = profile.experience
         educationTextField.text = profile.education
         premiumStatLabel.text = "\(profile.isPremium ? "Premium" : "Free")\nPlan"
-        cvStatusLabel.text = profile.cvFileName.map { "CV uploaded: \($0)" } ?? "No CV uploaded yet"
+        cvStatusLabel.text = cvStatusText(for: profile)
         updateCompletionUI(profile)
 
         if let profilePictureUrl = profile.profilePictureUrl {
@@ -430,13 +430,29 @@ class ProfileViewController: UIViewController {
 
         if profile.isComplete {
             completionCardView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
-            completionMissingLabel.text = profile.cvUrl == nil
-            ? "You can apply now. Uploading a CV will make each application stronger."
-            : "Ready to apply. Your CV will be attached to new applications."
+            completionMissingLabel.text = completionMessage(for: profile)
         } else {
             completionCardView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.12)
             completionMissingLabel.text = "Missing: \(profile.missingRequiredFields.joined(separator: ", "))"
         }
+    }
+
+    private func cvStatusText(for profile: UserProfile) -> String {
+        if !AppFeatures.firebaseStorageUploadsEnabled {
+            return "Firebase Storage is paused. Applications will use your profile CV draft."
+        }
+
+        return profile.cvFileName.map { "CV uploaded: \($0)" } ?? "No CV uploaded yet"
+    }
+
+    private func completionMessage(for profile: UserProfile) -> String {
+        if !AppFeatures.firebaseStorageUploadsEnabled {
+            return "You can apply now. Your profile CV draft will be used until PDF uploads are enabled."
+        }
+
+        return profile.cvUrl == nil
+        ? "You can apply now. Uploading a CV will make each application stronger."
+        : "Ready to apply. Your CV will be attached to new applications."
     }
 
     private func fetchProfileStats() {
@@ -526,12 +542,22 @@ class ProfileViewController: UIViewController {
             return
         }
 
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "Photo Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
+
         imagePickerService.presentImagePicker(from: self)
     }
 
     @objc private func uploadCVTapped() {
         guard let user = Auth.auth().currentUser, !user.isAnonymous else {
             showRegistrationPrompt()
+            return
+        }
+
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "PDF Upload Paused", message: AppFeatures.storagePausedMessage)
             return
         }
 
@@ -630,6 +656,10 @@ extension ProfileViewController: ImagePickerDelegate {
 
     func didSelectImage(_ image: UIImage) {
         guard let user = Auth.auth().currentUser, !user.isAnonymous else { return }
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "Photo Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
 
         profileImageView.image = image
         ProfilePictureService.shared.uploadProfilePicture(uid: user.uid, image: image) { [weak self] result in
@@ -651,6 +681,11 @@ extension ProfileViewController: ImagePickerDelegate {
 extension ProfileViewController: UIDocumentPickerDelegate {
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard AppFeatures.firebaseStorageUploadsEnabled else {
+            showAlert(title: "PDF Upload Paused", message: AppFeatures.storagePausedMessage)
+            return
+        }
+
         guard let user = Auth.auth().currentUser, !user.isAnonymous, let fileURL = urls.first else { return }
 
         uploadCVButton.isEnabled = false
