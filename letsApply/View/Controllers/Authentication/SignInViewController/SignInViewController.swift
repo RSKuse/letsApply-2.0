@@ -127,7 +127,10 @@ class SignInViewController: UIViewController {
                         AppRouter.showProfileSetup()
                     }
                 case .failure(let error):
-                    self.showAlert(title: "Sign In Failed", message: error.localizedDescription)
+                    self.showAlert(
+                        title: "Sign In Failed",
+                        message: FirebaseAuthenticationService.userMessage(for: error)
+                    )
                 }
             }
         }
@@ -144,7 +147,10 @@ class SignInViewController: UIViewController {
         viewModel.resetPassword(email: email) { [weak self] error in
             DispatchQueue.main.async {
                 if let error = error {
-                    self?.showAlert(title: "Reset Failed", message: error.localizedDescription)
+                    self?.showAlert(
+                        title: "Reset Failed",
+                        message: FirebaseAuthenticationService.userMessage(for: error)
+                    )
                 } else {
                     self?.showAlert(title: "Email Sent", message: "Check your inbox for a password reset link.")
                 }

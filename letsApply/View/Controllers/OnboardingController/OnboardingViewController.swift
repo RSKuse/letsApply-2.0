@@ -198,12 +198,18 @@ class OnboardingViewController: UIViewController {
     }
 
     @objc private func continueAsGuestTapped() {
+        continueAsGuestButton.isEnabled = false
+
         FirebaseAuthenticationService.shared.signUpAnonymously { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.continueAsGuestButton.isEnabled = true
 
                 if let error {
-                    self.showAlert(title: "Guest Mode Failed", message: error.localizedDescription)
+                    self.showAlert(
+                        title: "Guest Mode Failed",
+                        message: FirebaseAuthenticationService.userMessage(for: error)
+                    )
                 } else {
                     OnboardingState.markCompleted()
                     AppRouter.showMainApp()
