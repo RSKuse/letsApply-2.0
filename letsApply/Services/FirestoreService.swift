@@ -371,6 +371,18 @@ class FirestoreService {
                 ?? false,
             requiresCertifiedDocuments: applicationData["requiresCertifiedDocuments"] as? Bool
                 ?? data["requiresCertifiedDocuments"] as? Bool
+                ?? false,
+            referenceNumber: applicationData["referenceNumber"] as? String
+                ?? data["referenceNumber"] as? String
+                ?? "",
+            postalAddress: applicationData["postalAddress"] as? String
+                ?? data["postalAddress"] as? String
+                ?? "",
+            handDeliveryAddress: applicationData["handDeliveryAddress"] as? String
+                ?? data["handDeliveryAddress"] as? String
+                ?? "",
+            requiresDriversLicense: applicationData["requiresDriversLicense"] as? Bool
+                ?? data["requiresDriversLicense"] as? Bool
                 ?? false
         )
 

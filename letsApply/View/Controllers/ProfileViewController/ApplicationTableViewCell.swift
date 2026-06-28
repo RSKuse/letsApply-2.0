@@ -44,7 +44,7 @@ class ApplicationTableViewCell: UITableViewCell {
     }()
 
     private lazy var cvLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: .secondaryLabel, lines: 1)
-    private lazy var packageLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: AppTheme.brand, lines: 2)
+    private lazy var detailsLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: AppTheme.brand, lines: 2)
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -65,7 +65,7 @@ class ApplicationTableViewCell: UITableViewCell {
         cardView.addSubview(dateLabel)
         cardView.addSubview(statusLabel)
         cardView.addSubview(cvLabel)
-        cardView.addSubview(packageLabel)
+        cardView.addSubview(detailsLabel)
 
         NSLayoutConstraint.activate([
             cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
@@ -99,10 +99,10 @@ class ApplicationTableViewCell: UITableViewCell {
             cvLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             cvLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
 
-            packageLabel.topAnchor.constraint(equalTo: cvLabel.bottomAnchor, constant: 6),
-            packageLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            packageLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
-            packageLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
+            detailsLabel.topAnchor.constraint(equalTo: cvLabel.bottomAnchor, constant: 6),
+            detailsLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailsLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
+            detailsLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -121,7 +121,7 @@ class ApplicationTableViewCell: UITableViewCell {
         dateLabel.text = "\(datePrefix(for: application.status)) \(formattedDate(application.appliedDate))"
         configureStatus(application.status)
         cvLabel.text = application.cvUrl == nil ? "Profile CV draft used" : "CV attached"
-        packageLabel.text = packageText(for: application)
+        detailsLabel.text = applicationDetailsText(for: application)
     }
 
     private func configureStatus(_ status: String) {
@@ -142,7 +142,7 @@ class ApplicationTableViewCell: UITableViewCell {
     private func statusDisplayText(_ status: String) -> String {
         switch status {
         case "ready-to-submit":
-            return "Ready"
+            return "Continue"
         case "requires-manual-action":
             return "Action Needed"
         case "email-draft":
@@ -165,30 +165,36 @@ class ApplicationTableViewCell: UITableViewCell {
         }
     }
 
-    private func packageText(for application: Application) -> String {
+    private func applicationDetailsText(for application: Application) -> String {
         guard application.isAIGenerated == true else {
             return "Standard application"
         }
 
         if let matchScore = application.matchScore {
             let method = applicationMethodDisplay(application.applicationMethod)
-            return "\(method) package · \(matchScore)% match"
+            return "\(method) application · \(matchScore)% match"
         }
 
-        return "Smart application package"
+        return "AI-assisted application"
     }
 
     private func applicationMethodDisplay(_ method: String?) -> String {
         switch method {
-        case JobApplicationRoute.email.rawValue:
+        case JobApplicationMethod.email.rawValue:
             return "Email"
-        case JobApplicationRoute.externalPortal.rawValue:
-            return "Portal"
+        case JobApplicationMethod.externalWebsite.rawValue, JobApplicationRoute.externalPortal.rawValue:
+            return "Employer website"
+        case JobApplicationMethod.governmentEmail.rawValue:
+            return "Government email"
+        case JobApplicationMethod.governmentWebsite.rawValue:
+            return "Government website"
+        case JobApplicationMethod.governmentManual.rawValue, JobApplicationMethod.pdfCircular.rawValue:
+            return "Government"
         case JobApplicationRoute.requiredForm.rawValue:
             return "Required form"
-        case JobApplicationRoute.manual.rawValue:
+        case JobApplicationMethod.manualInstruction.rawValue, JobApplicationRoute.manual.rawValue:
             return "Manual"
-        case JobApplicationRoute.inApp.rawValue:
+        case JobApplicationMethod.internalApply.rawValue, JobApplicationRoute.inApp.rawValue:
             return "In-app"
         default:
             return "Application"

@@ -28,6 +28,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if debugScreen == "cv-studio" {
             return UINavigationController(rootViewController: CVBuilderViewController())
         }
+        if debugScreen == "home" {
+            return UINavigationController(rootViewController: HomeViewController())
+        }
         if debugScreen == "profile" {
             let profileViewController = ProfileViewController()
             profileViewController.debugProfile = UserProfile(

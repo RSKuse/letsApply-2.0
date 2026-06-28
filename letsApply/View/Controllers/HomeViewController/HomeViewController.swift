@@ -76,14 +76,14 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
 
     private func configureHeaderView() {
-        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 180)
+        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 210)
         jobTableView.tableHeaderView = advertHeaderView
         lastHeaderWidth = view.bounds.width
     }
 
     private func resizeHeaderIfNeeded() {
         guard view.bounds.width != lastHeaderWidth else { return }
-        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 180)
+        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 210)
         jobTableView.tableHeaderView = advertHeaderView
         lastHeaderWidth = view.bounds.width
     }

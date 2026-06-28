@@ -102,54 +102,107 @@ struct Job: Codable {
             .joined(separator: ", ")
     }
 
-    var applicationRoute: JobApplicationRoute {
-        switch application.method.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) {
-        case "in-app", "inapp", "internal":
-            return .inApp
+    var applicationMethod: JobApplicationMethod {
+        let method = application.method
+            .lowercased()
+            .filter { $0.isLetter }
+        switch method {
+        case "inapp", "internal", "internalapply":
+            return .internalApply
         case "email":
-            return .email
-        case "portal", "external", "external-portal":
-            return .externalPortal
-        case "form", "required-form", "z83":
-            return .requiredForm
-        case "manual", "manual-instructions":
-            return .manual
+            return requiresGovernmentFlow ? .governmentEmail : .email
+        case "portal", "external", "externalportal", "externalwebsite":
+            return requiresGovernmentFlow ? .governmentWebsite : .externalWebsite
+        case "governmentemail":
+            return .governmentEmail
+        case "governmentwebsite":
+            return .governmentWebsite
+        case "governmentmanual":
+            return .governmentManual
+        case "pdfcircular":
+            return .pdfCircular
+        case "form", "requiredform", "z83":
+            if requiresGovernmentFlow {
+                if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return .governmentEmail
+                }
+                if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return .governmentWebsite
+                }
+                return .governmentManual
+            }
+            return .manualInstruction
+        case "manual", "manualinstructions", "manualinstruction":
+            return .manualInstruction
         default:
             break
         }
 
-        let searchableText = [
-            title,
-            companyName,
-            description,
-            application.formName,
-            application.requiredForms.joined(separator: " "),
-            application.requiredDocuments.joined(separator: " ")
-        ]
-        .joined(separator: " ")
-        .lowercased()
+        if requiresGovernmentFlow {
+            if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .governmentEmail
+            }
 
-        if !application.formName.isEmpty
-            || !application.requiredForms.isEmpty
-            || !application.requiredDocuments.isEmpty
-            || application.requiresZ83
-            || searchableText.contains("z83") {
-            return .requiredForm
-        }
+            if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .governmentWebsite
+            }
 
-        if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .externalPortal
+            return sourceType.lowercased() == JobSourceType.publicFeed.rawValue.lowercased()
+                ? .pdfCircular
+                : .governmentManual
         }
 
         if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .email
         }
 
-        if !application.applicationInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .manual
+        if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .externalWebsite
         }
 
-        return .inApp
+        if !application.applicationInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .manualInstruction
+        }
+
+        return .internalApply
+    }
+
+    var applicationRoute: JobApplicationRoute {
+        switch applicationMethod {
+        case .internalApply:
+            return .inApp
+        case .email, .governmentEmail:
+            return .email
+        case .externalWebsite, .governmentWebsite:
+            return .externalPortal
+        case .governmentManual, .pdfCircular:
+            return .requiredForm
+        case .manualInstruction:
+            return .manual
+        }
+    }
+
+    var requiresGovernmentFlow: Bool {
+        let searchableText = [
+            title,
+            companyName,
+            description,
+            sourceName,
+            sourceType,
+            application.formName,
+            application.applicationInstructions,
+            application.requiredForms.joined(separator: " "),
+            application.requiredDocuments.joined(separator: " ")
+        ]
+        .joined(separator: " ")
+        .lowercased()
+
+        return application.requiresZ83
+            || sourceType.lowercased() == JobSourceType.government.rawValue.lowercased()
+            || searchableText.contains("z83")
+            || searchableText.contains("government")
+            || searchableText.contains("dpsa")
+            || searchableText.contains("department of")
     }
 }
 
@@ -289,6 +342,10 @@ struct JobApplicationInfo: Codable {
     let requiresCV: Bool
     let requiresZ83: Bool
     let requiresCertifiedDocuments: Bool
+    let referenceNumber: String
+    let postalAddress: String
+    let handDeliveryAddress: String
+    let requiresDriversLicense: Bool
 
     init(
         deadline: String,
@@ -303,7 +360,11 @@ struct JobApplicationInfo: Codable {
         requiresCoverLetter: Bool = true,
         requiresCV: Bool = true,
         requiresZ83: Bool = false,
-        requiresCertifiedDocuments: Bool = false
+        requiresCertifiedDocuments: Bool = false,
+        referenceNumber: String = "",
+        postalAddress: String = "",
+        handDeliveryAddress: String = "",
+        requiresDriversLicense: Bool = false
     ) {
         self.deadline = deadline
         self.applicationUrl = applicationUrl
@@ -318,6 +379,10 @@ struct JobApplicationInfo: Codable {
         self.requiresCV = requiresCV
         self.requiresZ83 = requiresZ83
         self.requiresCertifiedDocuments = requiresCertifiedDocuments
+        self.referenceNumber = referenceNumber
+        self.postalAddress = postalAddress
+        self.handDeliveryAddress = handDeliveryAddress
+        self.requiresDriversLicense = requiresDriversLicense
     }
 }
 
@@ -359,15 +424,15 @@ enum JobApplicationRoute: String, Codable {
     var title: String {
         switch self {
         case .inApp:
-            return "Submit in Let’s Apply"
+            return "Apply directly in Let’s Apply"
         case .email:
-            return "Apply by email"
+            return "Send your application by email"
         case .externalPortal:
-            return "Employer application portal"
+            return "Continue on the employer’s website"
         case .requiredForm:
-            return "Application form required"
+            return "Complete the required forms"
         case .manual:
-            return "Manual application instructions"
+            return "Follow the employer’s instructions"
         }
     }
 
@@ -387,22 +452,56 @@ enum JobApplicationRoute: String, Codable {
     }
 
     var actionTitle: String {
+        return "Submit Application"
+    }
+
+    var progressTitle: String {
         switch self {
         case .inApp:
-            return "Approve & Submit Application"
+            return "Submitting..."
         case .email:
-            return "Approve & Open Email"
-        case .externalPortal:
-            return "Save Package & Open Portal"
-        case .requiredForm:
-            return "Prepare Documents & Open Form"
+            return "Preparing Email..."
+        case .externalPortal, .requiredForm:
+            return "Preparing Documents..."
         case .manual:
-            return "Review Application Instructions"
+            return "Saving Draft..."
         }
     }
 
     var trackerValue: String {
         rawValue
+    }
+}
+
+enum JobApplicationMethod: String, Codable {
+    case internalApply
+    case email
+    case externalWebsite
+    case governmentEmail
+    case governmentWebsite
+    case governmentManual
+    case pdfCircular
+    case manualInstruction
+
+    var reviewTitle: String {
+        switch self {
+        case .internalApply:
+            return "Submit directly in Let’s Apply"
+        case .email:
+            return "Send with your email app"
+        case .externalWebsite:
+            return "Continue on the employer’s website"
+        case .governmentEmail:
+            return "Email a government application"
+        case .governmentWebsite:
+            return "Continue on the government website"
+        case .governmentManual:
+            return "Follow the government application instructions"
+        case .pdfCircular:
+            return "Apply using the vacancy circular instructions"
+        case .manualInstruction:
+            return "Follow the employer’s application instructions"
+        }
     }
 }
 
