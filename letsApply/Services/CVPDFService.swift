@@ -49,6 +49,47 @@ final class CVPDFService {
         return fileURL
     }
 
+    func generateCoverLetter(
+        for profile: UserProfile,
+        job: Job,
+        text: String
+    ) throws -> URL {
+        let name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw CVPDFError.missingName
+        }
+
+        let fileName = safeFileName(from: "\(name) \(job.title) Cover Letter")
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(fileName)
+            .appendingPathExtension("pdf")
+
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            try FileManager.default.removeItem(at: fileURL)
+        }
+
+        let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let format = UIGraphicsPDFRendererFormat()
+        format.documentInfo = [
+            kCGPDFContextTitle as String: "\(job.title) Cover Letter",
+            kCGPDFContextAuthor as String: name,
+            kCGPDFContextCreator as String: "Let's Apply"
+        ]
+
+        let renderer = UIGraphicsPDFRenderer(bounds: pageBounds, format: format)
+        try renderer.writePDF(to: fileURL) { context in
+            CoverLetterPDFWriter(
+                context: context,
+                pageBounds: pageBounds,
+                profile: profile,
+                job: job,
+                text: text
+            ).render()
+        }
+
+        return fileURL
+    }
+
     private func safeFileName(from value: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(.whitespaces)
         let cleaned = value.unicodeScalars
@@ -59,6 +100,152 @@ final class CVPDFService {
             .replacingOccurrences(of: " ", with: "_")
 
         return cleaned.isEmpty ? "Lets_Apply_CV" : cleaned
+    }
+}
+
+private final class CoverLetterPDFWriter {
+
+    private let context: UIGraphicsPDFRendererContext
+    private let pageBounds: CGRect
+    private let profile: UserProfile
+    private let job: Job
+    private let text: String
+    private let margin: CGFloat = 54
+
+    private let inkColor = UIColor(red: 0.05, green: 0.10, blue: 0.13, alpha: 1)
+    private let brandColor = UIColor(red: 0.05, green: 0.48, blue: 0.32, alpha: 1)
+    private let secondaryColor = UIColor(red: 0.34, green: 0.39, blue: 0.40, alpha: 1)
+
+    init(
+        context: UIGraphicsPDFRendererContext,
+        pageBounds: CGRect,
+        profile: UserProfile,
+        job: Job,
+        text: String
+    ) {
+        self.context = context
+        self.pageBounds = pageBounds
+        self.profile = profile
+        self.job = job
+        self.text = text
+    }
+
+    func render() {
+        context.beginPage()
+
+        brandColor.setFill()
+        context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: pageBounds.height))
+
+        draw(
+            profile.name.uppercased(),
+            frame: CGRect(x: margin, y: 32, width: pageBounds.width - (margin * 2), height: 32),
+            font: UIFont.systemFont(ofSize: 23, weight: .bold),
+            color: inkColor,
+            lineHeight: 28
+        )
+
+        let contactLine = [profile.email, profile.phone, profile.location]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "  |  ")
+
+        draw(
+            contactLine,
+            frame: CGRect(x: margin, y: 66, width: pageBounds.width - (margin * 2), height: 22),
+            font: UIFont.systemFont(ofSize: 10, weight: .medium),
+            color: secondaryColor,
+            lineHeight: 14
+        )
+
+        brandColor.setFill()
+        context.cgContext.fill(
+            CGRect(x: margin, y: 98, width: pageBounds.width - (margin * 2), height: 2)
+        )
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "d MMMM yyyy"
+        draw(
+            dateFormatter.string(from: Date()),
+            frame: CGRect(x: margin, y: 116, width: 220, height: 20),
+            font: UIFont.systemFont(ofSize: 10.5, weight: .medium),
+            color: secondaryColor,
+            lineHeight: 14
+        )
+
+        draw(
+            job.companyName,
+            frame: CGRect(x: margin, y: 142, width: pageBounds.width - (margin * 2), height: 22),
+            font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
+            color: inkColor,
+            lineHeight: 16
+        )
+
+        draw(
+            "RE: APPLICATION FOR \(job.title.uppercased())",
+            frame: CGRect(x: margin, y: 172, width: pageBounds.width - (margin * 2), height: 34),
+            font: UIFont.systemFont(ofSize: 12, weight: .bold),
+            color: brandColor,
+            lineHeight: 17
+        )
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 2
+        paragraphStyle.paragraphSpacing = 9
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
+        let body = NSAttributedString(
+            string: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: inkColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+
+        body.draw(
+            with: CGRect(
+                x: margin,
+                y: 214,
+                width: pageBounds.width - (margin * 2),
+                height: 526
+            ),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        )
+
+        draw(
+            "Prepared locally with Let’s Apply",
+            frame: CGRect(x: margin, y: 758, width: 260, height: 14),
+            font: UIFont.systemFont(ofSize: 8, weight: .medium),
+            color: secondaryColor,
+            lineHeight: 10
+        )
+    }
+
+    private func draw(
+        _ value: String,
+        frame: CGRect,
+        font: UIFont,
+        color: UIColor,
+        lineHeight: CGFloat
+    ) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.minimumLineHeight = lineHeight
+        paragraphStyle.maximumLineHeight = lineHeight
+
+        NSAttributedString(
+            string: value,
+            attributes: [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        .draw(
+            with: frame,
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        )
     }
 }
 

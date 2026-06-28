@@ -16,7 +16,7 @@ class ApplicationsViewController: UIViewController {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.separatorStyle = .none
-        tableView.backgroundColor = .systemBackground
+        tableView.backgroundColor = AppTheme.background
         tableView.register(ApplicationTableViewCell.self, forCellReuseIdentifier: ApplicationTableViewCell.reuseIdentifier)
         tableView.translatesAutoresizingMaskIntoConstraints = false
         return tableView
@@ -45,7 +45,7 @@ class ApplicationsViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Applications"
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = AppTheme.background
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             image: UIImage(systemName: "arrow.clockwise"),
             style: .plain,

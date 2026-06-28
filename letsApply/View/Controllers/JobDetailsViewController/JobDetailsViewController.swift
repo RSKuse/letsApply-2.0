@@ -41,8 +41,10 @@ class JobDetailsViewController: UIViewController {
 
     private lazy var headerCardView: UIView = {
         let view = UIView()
-        view.backgroundColor = .secondarySystemBackground
-        view.layer.cornerRadius = 18
+        view.backgroundColor = AppTheme.surface
+        view.layer.cornerRadius = AppTheme.cardRadius
+        view.layer.borderColor = AppTheme.border.cgColor
+        view.layer.borderWidth = 1
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -50,10 +52,10 @@ class JobDetailsViewController: UIViewController {
     private lazy var companyIconView: UIImageView = {
         let imageView = UIImageView()
         imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = .systemGreen
-        imageView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+        imageView.tintColor = AppTheme.brand
+        imageView.backgroundColor = AppTheme.mutedSurface
         imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = 18
+        imageView.layer.cornerRadius = AppTheme.cardRadius
         imageView.clipsToBounds = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
@@ -79,11 +81,10 @@ class JobDetailsViewController: UIViewController {
 
     private lazy var applyButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setTitle("Apply Now", for: .normal)
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-        button.backgroundColor = .systemGreen
-        button.layer.cornerRadius = 14
+        button.configuration = AppTheme.primaryButtonConfiguration(
+            title: "Review Application",
+            systemImageName: "arrow.right"
+        )
         button.addTarget(self, action: #selector(applyTapped), for: .touchUpInside)
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
@@ -95,12 +96,19 @@ class JobDetailsViewController: UIViewController {
             makeInfoRow(title: "Salary", value: salaryText(for: job)),
             makeInfoRow(title: "Job Type", value: job.jobType),
             makeInfoRow(title: "Remote", value: job.remote ? "Remote friendly" : "On-site"),
-            makeInfoRow(title: "Deadline", value: job.application.deadline)
+            makeInfoRow(title: "Deadline", value: job.application.deadline),
+            makeInfoRow(title: "Application", value: job.applicationRoute.title),
+            makeInfoRow(
+                title: "Source",
+                value: job.verified ? "\(job.sourceName) · Verified" : job.sourceName
+            )
         ])
         stackView.axis = .vertical
         stackView.spacing = 10
-        stackView.backgroundColor = .secondarySystemBackground
-        stackView.layer.cornerRadius = 16
+        stackView.backgroundColor = AppTheme.surface
+        stackView.layer.cornerRadius = AppTheme.cardRadius
+        stackView.layer.borderColor = AppTheme.border.cgColor
+        stackView.layer.borderWidth = 1
         stackView.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         stackView.isLayoutMarginsRelativeArrangement = true
         stackView.translatesAutoresizingMaskIntoConstraints = false
@@ -139,7 +147,7 @@ class JobDetailsViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = AppTheme.background
         title = "Job Details"
         setupNavigationBar()
         setupUI()
@@ -256,12 +264,14 @@ class JobDetailsViewController: UIViewController {
 
     private func updateApplyButton() {
         if hasApplied {
-            applyButton.setTitle("Application Submitted", for: .normal)
-            applyButton.backgroundColor = .systemGray
+            applyButton.configuration?.title = "Application Submitted"
+            applyButton.configuration?.image = UIImage(systemName: "checkmark")
+            applyButton.configuration?.baseBackgroundColor = .systemGray
             applyButton.isEnabled = false
         } else {
-            applyButton.setTitle("Review Application", for: .normal)
-            applyButton.backgroundColor = .systemGreen
+            applyButton.configuration?.title = job.applicationRoute.actionTitle
+            applyButton.configuration?.image = UIImage(systemName: "arrow.right")
+            applyButton.configuration?.baseBackgroundColor = AppTheme.brand
             applyButton.isEnabled = true
         }
     }
@@ -307,8 +317,10 @@ class JobDetailsViewController: UIViewController {
         let stackView = UIStackView(arrangedSubviews: [titleLabel, bodyLabel])
         stackView.axis = .vertical
         stackView.spacing = 10
-        stackView.backgroundColor = .secondarySystemBackground
-        stackView.layer.cornerRadius = 16
+        stackView.backgroundColor = AppTheme.surface
+        stackView.layer.cornerRadius = AppTheme.cardRadius
+        stackView.layer.borderColor = AppTheme.border.cgColor
+        stackView.layer.borderWidth = 1
         stackView.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         stackView.isLayoutMarginsRelativeArrangement = true
         return stackView
@@ -316,22 +328,21 @@ class JobDetailsViewController: UIViewController {
 
     private func makePremiumButton(title: String, action: Selector) -> UIButton {
         let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.setTitleColor(.systemGreen, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .bold)
-        button.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.10)
-        button.layer.cornerRadius = 12
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = title
+        configuration.image = UIImage(systemName: "sparkles")
+        configuration.imagePadding = 10
+        configuration.baseBackgroundColor = AppTheme.mutedSurface
+        configuration.baseForegroundColor = AppTheme.brand
+        configuration.cornerStyle = .medium
+        button.configuration = configuration
         button.heightAnchor.constraint(equalToConstant: 48).isActive = true
         button.addTarget(self, action: action, for: .touchUpInside)
         return button
     }
 
     private func salaryText(for job: Job) -> String {
-        let salary = job.compensation.salaryRange
-        if salary.min == 0 && salary.max == 0 {
-            return "Salary not disclosed"
-        }
-        return "\(salary.currency) \(salary.min) to \(salary.max)"
+        job.salaryText
     }
 
     private func bulletText(_ items: [String], fallback: String) -> String {

@@ -335,7 +335,11 @@ class FirestoreService {
             salaryRange: SalaryRange(
                 min: salaryRangeData["min"] as? Int ?? data["minSalary"] as? Int ?? 0,
                 max: salaryRangeData["max"] as? Int ?? data["maxSalary"] as? Int ?? 0,
-                currency: salaryRangeData["currency"] as? String ?? data["currency"] as? String ?? "ZAR"
+                currency: salaryRangeData["currency"] as? String ?? data["currency"] as? String ?? "ZAR",
+                period: salaryRangeData["period"] as? String
+                    ?? salaryRangeData["payPeriod"] as? String
+                    ?? data["salaryPeriod"] as? String
+                    ?? data["payPeriod"] as? String
             ),
             benefits: compensationData["benefits"] as? [String] ?? data["benefits"] as? [String] ?? []
         )
@@ -344,7 +348,30 @@ class FirestoreService {
             deadline: applicationData["deadline"] as? String ?? data["applicationDeadline"] as? String ?? "Open until filled",
             applicationUrl: applicationData["applicationUrl"] as? String ?? data["applicationUrl"] as? String ?? "",
             applicationEmail: applicationData["applicationEmail"] as? String ?? data["applicationEmail"] as? String ?? "",
-            contactPhone: applicationData["contactPhone"] as? String ?? data["contactPhone"] as? String ?? ""
+            contactPhone: applicationData["contactPhone"] as? String ?? data["contactPhone"] as? String ?? "",
+            method: applicationData["method"] as? String ?? data["applicationMethod"] as? String ?? "",
+            formName: applicationData["formName"] as? String ?? data["applicationFormName"] as? String ?? "",
+            requiredForms: applicationData["requiredForms"] as? [String]
+                ?? data["requiredForms"] as? [String]
+                ?? [],
+            requiredDocuments: applicationData["requiredDocuments"] as? [String]
+                ?? data["requiredDocuments"] as? [String]
+                ?? [],
+            applicationInstructions: applicationData["instructions"] as? String
+                ?? data["applicationInstructions"] as? String
+                ?? "",
+            requiresCoverLetter: applicationData["requiresCoverLetter"] as? Bool
+                ?? data["requiresCoverLetter"] as? Bool
+                ?? true,
+            requiresCV: applicationData["requiresCV"] as? Bool
+                ?? data["requiresCV"] as? Bool
+                ?? true,
+            requiresZ83: applicationData["requiresZ83"] as? Bool
+                ?? data["requiresZ83"] as? Bool
+                ?? false,
+            requiresCertifiedDocuments: applicationData["requiresCertifiedDocuments"] as? Bool
+                ?? data["requiresCertifiedDocuments"] as? Bool
+                ?? false
         )
 
         let visibility = Visibility(
@@ -370,7 +397,13 @@ class FirestoreService {
             jobCategory: data["jobCategory"] as? String ?? "General",
             postingDate: data["postingDate"] as? String ?? "",
             visibility: visibility,
-            promoted: data["promoted"] as? [String] ?? data["promotedTags"] as? [String]
+            promoted: data["promoted"] as? [String] ?? data["promotedTags"] as? [String],
+            sourceName: data["sourceName"] as? String ?? "Let’s Apply",
+            sourceUrl: data["sourceUrl"] as? String ?? "",
+            sourceJobId: data["sourceJobId"] as? String ?? data["externalId"] as? String ?? "",
+            sourceType: data["sourceType"] as? String ?? JobSourceType.manual.rawValue,
+            dateImported: data["dateImported"] as? String ?? "",
+            verified: data["verified"] as? Bool ?? false
         )
     }
 
@@ -390,7 +423,7 @@ class FirestoreService {
                 requirements: ["Swift", "UIKit", "MVVM"],
                 experience: Experience(minYears: 0, preferredYears: 1, details: "Portfolio projects accepted"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 18000, max: 30000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 18000, max: 30000, currency: "ZAR", period: "month"),
                     benefits: ["Remote", "Mentorship"]
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "careers@letsapply.co.za", contactPhone: ""),
@@ -413,7 +446,7 @@ class FirestoreService {
                 requirements: ["Research", "Excel", "Writing"],
                 experience: Experience(minYears: 1, preferredYears: 2, details: "Public sector experience preferred"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 22000, max: 35000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 22000, max: 35000, currency: "ZAR", period: "month"),
                     benefits: []
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "applications@example.org", contactPhone: ""),
@@ -436,7 +469,7 @@ class FirestoreService {
                 requirements: ["Administration", "Excel", "Communication"],
                 experience: Experience(minYears: 2, preferredYears: 3, details: "Higher education experience advantageous"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 25000, max: 38000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 25000, max: 38000, currency: "ZAR", period: "month"),
                     benefits: []
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "hr@example.ac.za", contactPhone: ""),
@@ -457,6 +490,9 @@ class FirestoreService {
         recruiterEmailSubject: String? = nil,
         recruiterEmailBody: String? = nil,
         matchScore: Int? = nil,
+        status: String = "submitted",
+        applicationMethod: String? = nil,
+        applicationDestination: String? = nil,
         completion: @escaping (Result<Application, Error>) -> Void
     ) {
         guard !userProfile.uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -487,14 +523,16 @@ class FirestoreService {
             jobTitle: job.title,
             companyName: job.companyName,
             appliedDate: Self.currentDateString(),
-            status: "submitted",
+            status: status,
             cvUrl: userProfile.cvUrl,
             coverLetterText: coverLetterText,
             isAIGenerated: isAIGenerated,
             tailoredCVText: tailoredCVText,
             recruiterEmailSubject: recruiterEmailSubject,
             recruiterEmailBody: recruiterEmailBody,
-            matchScore: matchScore
+            matchScore: matchScore,
+            applicationMethod: applicationMethod,
+            applicationDestination: applicationDestination
         )
 
         document.setData(mapApplicationData(application), merge: false) { error in
@@ -514,7 +552,19 @@ class FirestoreService {
         db.collection(FirebaseCollections.applications.rawValue)
             .document(applicationId)
             .getDocument { snapshot, _ in
-                completion(snapshot?.exists == true)
+                guard let data = snapshot?.data() else {
+                    completion(false)
+                    return
+                }
+
+                let status = (data["status"] as? String ?? "").lowercased()
+                let submittedStatuses = [
+                    "submitted",
+                    "sent",
+                    "applied-by-email",
+                    "applied-externally"
+                ]
+                completion(submittedStatuses.contains(status))
             }
     }
 
@@ -653,6 +703,14 @@ class FirestoreService {
             data["matchScore"] = matchScore
         }
 
+        if let applicationMethod = application.applicationMethod {
+            data["applicationMethod"] = applicationMethod
+        }
+
+        if let applicationDestination = application.applicationDestination {
+            data["applicationDestination"] = applicationDestination
+        }
+
         return data
     }
 
@@ -671,7 +729,9 @@ class FirestoreService {
             tailoredCVText: data["tailoredCVText"] as? String,
             recruiterEmailSubject: data["recruiterEmailSubject"] as? String,
             recruiterEmailBody: data["recruiterEmailBody"] as? String,
-            matchScore: data["matchScore"] as? Int
+            matchScore: data["matchScore"] as? Int,
+            applicationMethod: data["applicationMethod"] as? String,
+            applicationDestination: data["applicationDestination"] as? String
         )
     }
 

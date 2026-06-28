@@ -20,6 +20,8 @@ struct Application: Codable {
     var recruiterEmailSubject: String?
     var recruiterEmailBody: String?
     var matchScore: Int?
+    var applicationMethod: String?
+    var applicationDestination: String?
 }
 
 struct SavedJob: Codable {
