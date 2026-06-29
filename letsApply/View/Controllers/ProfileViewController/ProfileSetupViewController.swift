@@ -14,6 +14,7 @@ class ProfileViewController: UIViewController {
     #endif
 
     private let firestoreService = FirestoreService()
+    private let adminAccessService = AdminAccessService()
     private let imagePickerService = ImagePickerService()
     private var currentProfile = UserProfile()
 
@@ -319,6 +320,7 @@ class ProfileViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        configureAdminAccess()
         #if DEBUG
         if let debugProfile {
             currentProfile = debugProfile
@@ -358,6 +360,30 @@ class ProfileViewController: UIViewController {
         )
         homeButton.accessibilityLabel = "Home"
         navigationItem.rightBarButtonItem = homeButton
+    }
+
+    private func configureAdminAccess() {
+        guard !isProfileSetupMode else { return }
+
+        adminAccessService.checkAccess { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+
+                guard case .success(true) = result else {
+                    self.navigationItem.rightBarButtonItem = nil
+                    return
+                }
+
+                let adminButton = UIBarButtonItem(
+                    image: UIImage(systemName: "briefcase.fill"),
+                    style: .plain,
+                    target: self,
+                    action: #selector(self.openAdminJobs)
+                )
+                adminButton.accessibilityLabel = "Manage jobs"
+                self.navigationItem.rightBarButtonItem = adminButton
+            }
+        }
     }
 
     private func setupUI() {
@@ -867,6 +893,12 @@ class ProfileViewController: UIViewController {
         let applicationsVC = ApplicationsViewController(userId: user.uid)
         applicationsVC.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(applicationsVC, animated: true)
+    }
+
+    @objc private func openAdminJobs() {
+        let adminJobsViewController = AdminJobsViewController()
+        adminJobsViewController.hidesBottomBarWhenPushed = true
+        navigationController?.pushViewController(adminJobsViewController, animated: true)
     }
 
     @objc private func openSavedJobs() {

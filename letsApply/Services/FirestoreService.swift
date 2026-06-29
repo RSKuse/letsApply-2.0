@@ -113,32 +113,81 @@ class FirestoreService {
     }
 
     func fetchJobs(numberOfJobsToFetch: Int? = nil, completion: @escaping ([Job]) -> Void) {
-        var query: Query = db.collection(FirebaseCollections.jobs.rawValue)
-
-        if let numberOfJobsToFetch = numberOfJobsToFetch {
-            query = query.limit(to: numberOfJobsToFetch)
-        }
-
-        query.getDocuments { snapshot, error in
+        db.collection(FirebaseCollections.jobs.rawValue).getDocuments { snapshot, error in
             if let error = error {
                 print("Error fetching jobs: \(error.localizedDescription)")
-                completion(Self.sampleJobs())
+                completion(self.candidateFallbackJobs())
                 return
             }
 
             guard let documents = snapshot?.documents, !documents.isEmpty else {
-                completion(Self.sampleJobs())
+                completion(self.candidateFallbackJobs())
                 return
             }
 
-            let jobs = documents.map { document in
-                self.mapJob(from: document.data(), documentID: document.documentID)
-            }
-            print("Documents found: \(documents.count)")
-            print("Loaded from Firestore")
+            var jobs = documents
+                .map {
+                    self.mapJob(from: $0.data(), documentID: $0.documentID)
+                }
+                .filter(\.isVisibleToCandidates)
+                .sorted { $0.postingDate > $1.postingDate }
 
-            completion(jobs.isEmpty ? Self.sampleJobs() : jobs)
+            if let numberOfJobsToFetch {
+                jobs = Array(jobs.prefix(numberOfJobsToFetch))
+            }
+
+            print("Documents found: \(documents.count)")
+            print("Published vacancies loaded: \(jobs.count)")
+
+            completion(jobs.isEmpty ? self.candidateFallbackJobs() : jobs)
         }
+    }
+
+    func fetchAdminJobs(completion: @escaping (Result<[Job], Error>) -> Void) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .getDocuments { snapshot, error in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+
+                let jobs = snapshot?.documents
+                    .map {
+                        self.mapJob(from: $0.data(), documentID: $0.documentID)
+                    }
+                    .sorted { $0.postingDate > $1.postingDate } ?? []
+                completion(.success(jobs))
+            }
+    }
+
+    func saveAdminJob(_ job: Job, completion: @escaping (Error?) -> Void) {
+        let collection = db.collection(FirebaseCollections.jobs.rawValue)
+        let document = job.id.map(collection.document) ?? collection.document()
+        var data = mapJobData(job)
+        data["updatedAt"] = FieldValue.serverTimestamp()
+
+        if job.id == nil {
+            data["createdAt"] = FieldValue.serverTimestamp()
+        }
+
+        document.setData(data, merge: false, completion: completion)
+    }
+
+    func updateJobPublicationStatus(
+        jobId: String,
+        status: JobPublicationStatus,
+        completion: @escaping (Error?) -> Void
+    ) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .document(jobId)
+            .setData(
+                [
+                    "publicationStatus": status.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ],
+                merge: true,
+                completion: completion
+            )
     }
 
     func fetchJob(jobId: String, completion: @escaping (Result<Job, Error>) -> Void) {
@@ -415,8 +464,107 @@ class FirestoreService {
             sourceJobId: data["sourceJobId"] as? String ?? data["externalId"] as? String ?? "",
             sourceType: data["sourceType"] as? String ?? JobSourceType.manual.rawValue,
             dateImported: data["dateImported"] as? String ?? "",
-            verified: data["verified"] as? Bool ?? false
+            verified: data["verified"] as? Bool ?? false,
+            closingDate: dateString(
+                from: data["closingDate"]
+                    ?? applicationData["closingDate"]
+                    ?? applicationData["deadline"]
+            ),
+            publicationStatus: data["publicationStatus"] as? String
+                ?? data["status"] as? String
+                ?? JobPublicationStatus.published.rawValue
         )
+    }
+
+    private func mapJobData(_ job: Job) -> [String: Any] {
+        return [
+            "title": job.title,
+            "companyName": job.companyName,
+            "companyImageName": job.companyImageName ?? "",
+            "location": [
+                "city": job.location.city,
+                "region": job.location.region,
+                "country": job.location.country
+            ],
+            "jobType": job.jobType,
+            "remote": job.remote,
+            "description": job.description,
+            "qualifications": job.qualifications,
+            "responsibilities": job.responsibilities,
+            "requirements": job.requirements,
+            "experience": [
+                "minYears": job.experience.minYears,
+                "preferredYears": job.experience.preferredYears,
+                "details": job.experience.details
+            ],
+            "compensation": [
+                "salaryRange": [
+                    "min": job.compensation.salaryRange.min,
+                    "max": job.compensation.salaryRange.max,
+                    "currency": job.compensation.salaryRange.currency,
+                    "period": job.compensation.salaryRange.period ?? SalaryPayPeriod.annum.rawValue
+                ],
+                "benefits": job.compensation.benefits
+            ],
+            "application": [
+                "deadline": job.application.deadline,
+                "closingDate": job.closingDate,
+                "applicationUrl": job.application.applicationUrl,
+                "applicationEmail": job.application.applicationEmail,
+                "contactPhone": job.application.contactPhone,
+                "method": job.applicationMethod.rawValue,
+                "formName": job.application.formName,
+                "requiredForms": job.application.requiredForms,
+                "requiredDocuments": job.application.requiredDocuments,
+                "instructions": job.application.applicationInstructions,
+                "requiresCoverLetter": job.application.requiresCoverLetter,
+                "requiresCV": job.application.requiresCV,
+                "requiresZ83": job.application.requiresZ83,
+                "requiresCertifiedDocuments": job.application.requiresCertifiedDocuments,
+                "referenceNumber": job.application.referenceNumber,
+                "postalAddress": job.application.postalAddress,
+                "handDeliveryAddress": job.application.handDeliveryAddress,
+                "requiresDriversLicense": job.application.requiresDriversLicense
+            ],
+            "jobCategory": job.jobCategory,
+            "postingDate": job.postingDate,
+            "closingDate": job.closingDate,
+            "visibility": [
+                "featured": job.visibility.featured,
+                "promoted": job.visibility.promoted
+            ],
+            "promoted": job.promoted ?? [],
+            "sourceName": job.sourceName,
+            "sourceUrl": job.sourceUrl,
+            "sourceJobId": job.sourceJobId,
+            "sourceType": job.sourceType,
+            "dateImported": job.dateImported,
+            "verified": job.verified,
+            "publicationStatus": job.publicationStatus
+        ]
+    }
+
+    private func dateString(from value: Any?) -> String {
+        if let string = value as? String {
+            return string
+        }
+
+        guard let timestamp = value as? Timestamp else {
+            return ""
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: timestamp.dateValue())
+    }
+
+    private func candidateFallbackJobs() -> [Job] {
+        #if DEBUG
+        return Self.sampleJobs().filter(\.isVisibleToCandidates)
+        #else
+        return []
+        #endif
     }
 
     static func sampleJobs() -> [Job] {

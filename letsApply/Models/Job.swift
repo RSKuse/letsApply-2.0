@@ -31,6 +31,8 @@ struct Job: Codable {
     let sourceType: String
     let dateImported: String
     let verified: Bool
+    let closingDate: String
+    let publicationStatus: String
 
     init(
         id: String?,
@@ -56,7 +58,9 @@ struct Job: Codable {
         sourceJobId: String = "",
         sourceType: String = JobSourceType.manual.rawValue,
         dateImported: String = "",
-        verified: Bool = false
+        verified: Bool = false,
+        closingDate: String = "",
+        publicationStatus: String = JobPublicationStatus.published.rawValue
     ) {
         self.id = id
         self.title = title
@@ -82,6 +86,8 @@ struct Job: Codable {
         self.sourceType = sourceType
         self.dateImported = dateImported
         self.verified = verified
+        self.closingDate = closingDate
+        self.publicationStatus = publicationStatus
     }
 
     var isFeatured: Bool {
@@ -203,6 +209,72 @@ struct Job: Codable {
             || searchableText.contains("government")
             || searchableText.contains("dpsa")
             || searchableText.contains("department of")
+    }
+
+    var resolvedPublicationStatus: JobPublicationStatus {
+        if isExpired {
+            return .expired
+        }
+
+        return JobPublicationStatus(rawValue: publicationStatus.lowercased()) ?? .published
+    }
+
+    var isVisibleToCandidates: Bool {
+        return resolvedPublicationStatus == .published
+    }
+
+    var isExpired: Bool {
+        if publicationStatus.lowercased() == JobPublicationStatus.expired.rawValue {
+            return true
+        }
+
+        guard let closingDateValue else { return false }
+        let endOfClosingDay = Calendar.current.date(
+            bySettingHour: 23,
+            minute: 59,
+            second: 59,
+            of: closingDateValue
+        ) ?? closingDateValue
+        return endOfClosingDay < Date()
+    }
+
+    var closingDateText: String {
+        guard let closingDateValue else {
+            let deadline = application.deadline.trimmingCharacters(in: .whitespacesAndNewlines)
+            return deadline.isEmpty ? "Open until filled" : deadline
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: closingDateValue)
+    }
+
+    private var closingDateValue: Date? {
+        let rawValue = closingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deadlineValue = application.deadline.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = rawValue.isEmpty ? deadlineValue : rawValue
+        guard !value.isEmpty else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let formats = [
+            "yyyy-MM-dd",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "d MMMM yyyy",
+            "d MMM yyyy",
+            "MMMM d, yyyy",
+            "MMM d, yyyy"
+        ]
+
+        for format in formats {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+
+        return nil
     }
 }
 
@@ -473,7 +545,7 @@ enum JobApplicationRoute: String, Codable {
     }
 }
 
-enum JobApplicationMethod: String, Codable {
+enum JobApplicationMethod: String, Codable, CaseIterable {
     case internalApply
     case email
     case externalWebsite
@@ -503,13 +575,83 @@ enum JobApplicationMethod: String, Codable {
             return "Follow the employer’s application instructions"
         }
     }
+
+    var editorTitle: String {
+        switch self {
+        case .internalApply:
+            return "Inside Let’s Apply"
+        case .email:
+            return "Email"
+        case .externalWebsite:
+            return "Employer Website"
+        case .governmentEmail:
+            return "Government Email"
+        case .governmentWebsite:
+            return "Government Website"
+        case .governmentManual:
+            return "Government Manual"
+        case .pdfCircular:
+            return "PDF Circular"
+        case .manualInstruction:
+            return "Manual Instructions"
+        }
+    }
+
+    var editorDetail: String {
+        switch self {
+        case .internalApply:
+            return "Candidates submit and track the application entirely inside Let’s Apply."
+        case .email:
+            return "A prepared email opens with the CV and cover letter attached."
+        case .externalWebsite:
+            return "Documents are prepared before the employer’s website opens."
+        case .governmentEmail:
+            return "Government checklist first, then a prepared email application."
+        case .governmentWebsite:
+            return "Government checklist first, then the official website."
+        case .governmentManual:
+            return "Shows Z83, delivery, postal, and supporting-document instructions."
+        case .pdfCircular:
+            return "Uses the application instructions extracted from a vacancy circular."
+        case .manualInstruction:
+            return "Shows the employer’s instructions and prepares shareable documents."
+        }
+    }
 }
 
-enum JobSourceType: String, Codable {
+enum JobPublicationStatus: String, Codable, CaseIterable {
+    case draft
+    case published
+    case paused
+    case expired
+
+    var title: String {
+        rawValue.capitalized
+    }
+}
+
+enum JobSourceType: String, Codable, CaseIterable {
     case manual
     case recruiter
     case government
     case companyWebsite
     case partner
     case publicFeed
+
+    var title: String {
+        switch self {
+        case .manual:
+            return "Let’s Apply Curated"
+        case .recruiter:
+            return "Recruiter"
+        case .government:
+            return "Government"
+        case .companyWebsite:
+            return "Company Website"
+        case .partner:
+            return "Partner"
+        case .publicFeed:
+            return "Public Feed"
+        }
+    }
 }

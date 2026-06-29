@@ -31,6 +31,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if debugScreen == "home" {
             return UINavigationController(rootViewController: HomeViewController())
         }
+        if debugScreen == "admin-jobs" {
+            return UINavigationController(
+                rootViewController: AdminJobsViewController(isDebugMode: true)
+            )
+        }
+        if debugScreen == "admin-editor" {
+            return UINavigationController(
+                rootViewController: AdminJobEditorViewController(isDebugMode: true)
+            )
+        }
         if debugScreen == "profile" {
             let profileViewController = ProfileViewController()
             profileViewController.debugProfile = UserProfile(

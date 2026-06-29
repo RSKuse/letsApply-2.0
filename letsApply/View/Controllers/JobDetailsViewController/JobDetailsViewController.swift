@@ -9,6 +9,7 @@ import FirebaseAuth
 class JobDetailsViewController: UIViewController {
 
     private let job: Job
+    private let isPreviewMode: Bool
     private let firestoreService = FirestoreService()
     private var currentProfile: UserProfile?
     private var isSaved = false
@@ -96,7 +97,7 @@ class JobDetailsViewController: UIViewController {
             makeInfoRow(title: "Salary", value: salaryText(for: job)),
             makeInfoRow(title: "Job Type", value: job.jobType),
             makeInfoRow(title: "Remote", value: job.remote ? "Remote friendly" : "On-site"),
-            makeInfoRow(title: "Deadline", value: job.application.deadline),
+            makeInfoRow(title: "Deadline", value: job.closingDateText),
             makeInfoRow(title: "Application", value: job.applicationRoute.title),
             makeInfoRow(
                 title: "Source",
@@ -136,8 +137,9 @@ class JobDetailsViewController: UIViewController {
         return stackView
     }()
 
-    init(job: Job) {
+    init(job: Job, isPreviewMode: Bool = false) {
         self.job = job
+        self.isPreviewMode = isPreviewMode
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -148,16 +150,23 @@ class JobDetailsViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = AppTheme.background
-        title = "Job Details"
+        title = isPreviewMode ? "Vacancy Preview" : "Job Details"
         setupNavigationBar()
         setupUI()
         configure()
+
+        if isPreviewMode {
+            configurePreviewMode()
+            return
+        }
+
         fetchProfileState()
         fetchSavedState()
         fetchApplicationState()
     }
 
     private func setupNavigationBar() {
+        guard !isPreviewMode else { return }
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             image: UIImage(systemName: "bookmark"),
             style: .plain,
@@ -211,6 +220,14 @@ class JobDetailsViewController: UIViewController {
     private func configure() {
         titleLabel.text = job.title
         companyLabel.text = "\(job.companyName)\n\(job.locationText)"
+    }
+
+    private func configurePreviewMode() {
+        applyButton.configuration?.title = "Preview Only"
+        applyButton.configuration?.image = UIImage(systemName: "eye")
+        applyButton.configuration?.baseBackgroundColor = .systemGray
+        applyButton.isEnabled = false
+        premiumToolsStackView.isHidden = true
     }
 
     private func fetchProfileState() {
