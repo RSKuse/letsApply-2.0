@@ -17,5 +17,5 @@ enum FirebaseCollections: String {
 enum AppFeatures {
     static let firebaseStorageUploadsEnabled = false
 
-    static let storagePausedMessage = "PDF and photo uploads need Firebase Storage, which requires the paid Blaze plan. For now, Let's Apply will use your profile and CV draft so you can keep building and testing without paying."
+    static let storagePausedMessage = "PDF uploads are paused. Let’s Apply creates CV and cover-letter PDFs locally so you can preview, save, and share them without paid cloud storage."
 }

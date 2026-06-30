@@ -28,8 +28,17 @@ service cloud.firestore {
       return signedIn() && documentId.matches(request.auth.uid + '_.*');
     }
 
+    function validProfileImage() {
+      return !('profileImageData' in request.resource.data)
+        || (
+          request.resource.data.profileImageData is bytes
+          && request.resource.data.profileImageData.size() <= 180000
+        );
+    }
+
     match /users/{userId} {
-      allow read, write: if ownsUserDocument(userId);
+      allow read, delete: if ownsUserDocument(userId);
+      allow create, update: if ownsUserDocument(userId) && validProfileImage();
     }
 
     match /admins/{userId} {

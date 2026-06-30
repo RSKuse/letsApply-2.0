@@ -43,6 +43,10 @@ class FirestoreService {
             data[UserProfile.CodingKeys.profilePictureUrl.rawValue] = profilePictureUrl
         }
 
+        if let profileImageData = profile.profileImageData {
+            data[UserProfile.CodingKeys.profileImageData.rawValue] = profileImageData
+        }
+
         if let cvUrl = profile.cvUrl {
             data[UserProfile.CodingKeys.cvUrl.rawValue] = cvUrl
         }
@@ -221,6 +225,7 @@ class FirestoreService {
             phone: data[UserProfile.CodingKeys.phone.rawValue] as? String ?? "",
             location: data[UserProfile.CodingKeys.location.rawValue] as? String ?? "South Africa",
             profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String ?? data["profile_picture_url"] as? String,
+            profileImageData: data[UserProfile.CodingKeys.profileImageData.rawValue] as? Data,
             cvUrl: data[UserProfile.CodingKeys.cvUrl.rawValue] as? String ?? data["cv_url"] as? String,
             cvFileName: data[UserProfile.CodingKeys.cvFileName.rawValue] as? String ?? data["cv_file_name"] as? String,
             professionalSummary: data[UserProfile.CodingKeys.professionalSummary.rawValue] as? String ?? data["professional_summary"] as? String ?? "",
@@ -825,6 +830,71 @@ class FirestoreService {
         return "\(userId)_\(jobId)"
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: " ", with: "_")
+    }
+
+    func deleteUserData(userId: String, completion: @escaping (Error?) -> Void) {
+        let collections = [
+            FirebaseCollections.applications.rawValue,
+            FirebaseCollections.savedJobs.rawValue
+        ]
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var documentReferences: [DocumentReference] = [
+            db.collection(FirebaseCollections.users.rawValue).document(userId)
+        ]
+        var firstError: Error?
+
+        for collection in collections {
+            group.enter()
+            db.collection(collection)
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments { snapshot, error in
+                    lock.lock()
+                    if firstError == nil {
+                        firstError = error
+                    }
+                    documentReferences.append(contentsOf: snapshot?.documents.map(\.reference) ?? [])
+                    lock.unlock()
+                    group.leave()
+                }
+        }
+
+        group.notify(queue: .main) {
+            if let firstError {
+                completion(firstError)
+                return
+            }
+
+            self.deleteDocuments(
+                Array(documentReferences),
+                completion: completion
+            )
+        }
+    }
+
+    private func deleteDocuments(
+        _ references: [DocumentReference],
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard !references.isEmpty else {
+            completion(nil)
+            return
+        }
+
+        let currentBatch = Array(references.prefix(400))
+        let remaining = Array(references.dropFirst(currentBatch.count))
+        let batch = db.batch()
+        currentBatch.forEach { reference in
+            batch.deleteDocument(reference)
+        }
+        batch.commit { error in
+            if let error {
+                completion(error)
+                return
+            }
+
+            self.deleteDocuments(remaining, completion: completion)
+        }
     }
 
     private func mapApplicationData(_ application: Application) -> [String: Any] {

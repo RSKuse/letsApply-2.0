@@ -1,0 +1,33 @@
+name: Import DPSA vacancies
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 16 * * 5"
+      timezone: "Africa/Johannesburg"
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install importer
+        run: pip install -r tools/requirements.txt
+
+      - name: Test importer
+        run: python -m unittest discover -s tools -p "test_*.py"
+
+      - name: Import latest official circular
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python tools/import_dpsa_vacancies.py --publish

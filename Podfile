@@ -1,4 +1,4 @@
-platform :ios, '13.0' # or the iOS version you're targeting
+platform :ios, '15.0'
 
 target 'letsApply' do
   use_frameworks!
@@ -8,7 +8,10 @@ target 'letsApply' do
   pod 'Firebase/Storage'
 end
 
-target 'letsApplyTests' do
-  inherit! :search_paths
-  # Test-specific dependencies
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
 end

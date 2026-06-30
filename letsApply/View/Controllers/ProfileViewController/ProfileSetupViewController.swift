@@ -38,6 +38,8 @@ class ProfileViewController: UIViewController {
             applicationsButton,
             savedJobsButton,
             createProfileButton,
+            privacyButton,
+            deleteAccountButton,
             logoutButton
         ])
         stackView.axis = .vertical
@@ -308,6 +310,29 @@ class ProfileViewController: UIViewController {
         return button
     }()
 
+    private lazy var privacyButton: UIButton = {
+        let button = makeSecondaryButton(
+            title: "Privacy & Data",
+            systemImageName: "hand.raised.fill"
+        )
+        button.addTarget(self, action: #selector(openPrivacy), for: .touchUpInside)
+        return button
+    }()
+
+    private lazy var deleteAccountButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.title = "Delete Account"
+        configuration.image = UIImage(systemName: "trash")
+        configuration.imagePadding = 8
+        configuration.baseForegroundColor = .systemRed
+        button.configuration = configuration
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        button.addTarget(self, action: #selector(deleteAccountTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = isProfileSetupMode ? "Complete Profile" : "Profile"
@@ -522,6 +547,8 @@ class ProfileViewController: UIViewController {
             createProfileButton.heightAnchor.constraint(equalToConstant: 48),
             applicationsButton.heightAnchor.constraint(equalToConstant: 48),
             savedJobsButton.heightAnchor.constraint(equalToConstant: 48),
+            privacyButton.heightAnchor.constraint(equalToConstant: 48),
+            deleteAccountButton.heightAnchor.constraint(equalToConstant: 44),
             logoutButton.heightAnchor.constraint(equalToConstant: 44)
         ])
 
@@ -688,6 +715,7 @@ class ProfileViewController: UIViewController {
         populateProfile(currentProfile)
         saveButton.isHidden = true
         createProfileButton.isHidden = false
+        deleteAccountButton.isHidden = true
         logoutButton.setTitle("Exit Guest Mode", for: .normal)
     }
 
@@ -708,7 +736,10 @@ class ProfileViewController: UIViewController {
         updateCompletionUI(profile)
         updateCVStudioUI(profile)
 
-        if let profilePictureUrl = profile.profilePictureUrl {
+        if let profileImageData = profile.profileImageData,
+           let image = ProfilePictureService.shared.image(fromFirestoreData: profileImageData) {
+            profileImageView.image = image
+        } else if let profilePictureUrl = profile.profilePictureUrl {
             ProfilePictureService.shared.fetchProfilePicture(urlString: profilePictureUrl) { [weak self] image in
                 self?.profileImageView.image = image ?? UIImage(systemName: "person.circle.fill")
             }
@@ -718,6 +749,8 @@ class ProfileViewController: UIViewController {
 
         saveButton.isHidden = false
         createProfileButton.isHidden = true
+        deleteAccountButton.isHidden = false
+        logoutButton.setTitle("Logout", for: .normal)
     }
 
     private func updateCompletionUI(_ profile: UserProfile) {
@@ -820,6 +853,7 @@ class ProfileViewController: UIViewController {
             phone: phoneTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             location: locationTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             profilePictureUrl: currentProfile.profilePictureUrl,
+            profileImageData: currentProfile.profileImageData,
             cvUrl: currentProfile.cvUrl,
             cvFileName: currentProfile.cvFileName,
             professionalSummary: professionalSummaryText(),
@@ -870,11 +904,6 @@ class ProfileViewController: UIViewController {
             return
         }
 
-        guard AppFeatures.firebaseStorageUploadsEnabled else {
-            showAlert(title: "Photo Upload Paused", message: AppFeatures.storagePausedMessage)
-            return
-        }
-
         imagePickerService.presentImagePicker(from: self)
     }
 
@@ -912,6 +941,12 @@ class ProfileViewController: UIViewController {
         navigationController?.pushViewController(savedJobsVC, animated: true)
     }
 
+    @objc private func openPrivacy() {
+        let legalViewController = LegalViewController()
+        legalViewController.hidesBottomBarWhenPushed = true
+        navigationController?.pushViewController(legalViewController, animated: true)
+    }
+
     @objc private func createProfileTapped() {
         navigationController?.pushViewController(SignUpViewController(), animated: true)
     }
@@ -921,12 +956,114 @@ class ProfileViewController: UIViewController {
     }
 
     @objc private func logout() {
+        if let user = Auth.auth().currentUser, user.isAnonymous {
+            user.delete { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self.showAlert(
+                            title: "Exit Guest Mode Failed",
+                            message: FirebaseAuthenticationService.userMessage(for: error)
+                        )
+                    } else {
+                        OnboardingState.reset()
+                        AppRouter.showOnboarding()
+                    }
+                }
+            }
+            return
+        }
+
         FirebaseAuthenticationService.shared.signOut { [weak self] error in
             DispatchQueue.main.async {
                 if let error = error {
                     self?.showAlert(title: "Logout Failed", message: error.localizedDescription)
                 } else {
                     AppRouter.showOnboarding()
+                }
+            }
+        }
+    }
+
+    @objc private func deleteAccountTapped() {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else {
+            showRegistrationPrompt()
+            return
+        }
+
+        guard let email = user.email, !email.isEmpty else {
+            showAlert(
+                title: "Account Deletion",
+                message: "This account cannot be verified for deletion. Sign out, sign in again, and retry."
+            )
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "Delete Account Permanently?",
+            message: "This removes your profile, saved jobs, applications, and sign-in account. This cannot be undone. Enter your password to confirm.",
+            preferredStyle: .alert
+        )
+        alert.addTextField {
+            $0.placeholder = "Password"
+            $0.isSecureTextEntry = true
+            $0.textContentType = .password
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Delete Account", style: .destructive) { [weak self, weak alert] _ in
+            let password = alert?.textFields?.first?.text ?? ""
+            self?.deleteAccount(email: email, password: password, user: user)
+        })
+        present(alert, animated: true)
+    }
+
+    private func deleteAccount(email: String, password: String, user: User) {
+        guard !password.isEmpty else {
+            showAlert(title: "Password Needed", message: "Enter your password to delete the account.")
+            return
+        }
+
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+        view.isUserInteractionEnabled = false
+
+        user.reauthenticate(with: credential) { [weak self] _, error in
+            guard let self else { return }
+
+            if let error {
+                DispatchQueue.main.async {
+                    self.view.isUserInteractionEnabled = true
+                    self.showAlert(
+                        title: "Account Not Deleted",
+                        message: FirebaseAuthenticationService.userMessage(for: error)
+                    )
+                }
+                return
+            }
+
+            self.firestoreService.deleteUserData(userId: user.uid) { [weak self] error in
+                guard let self else { return }
+
+                if let error {
+                    self.view.isUserInteractionEnabled = true
+                    self.showAlert(title: "Account Not Deleted", message: error.localizedDescription)
+                    return
+                }
+
+                user.delete { [weak self] error in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        self.view.isUserInteractionEnabled = true
+
+                        if let error {
+                            self.showAlert(
+                                title: "Account Not Deleted",
+                                message: FirebaseAuthenticationService.userMessage(for: error)
+                            )
+                            return
+                        }
+
+                        OnboardingState.reset()
+                        AppRouter.showOnboarding()
+                    }
                 }
             }
         }
@@ -973,24 +1110,14 @@ extension ProfileViewController: ImagePickerDelegate {
 
     func didSelectImage(_ image: UIImage) {
         guard let user = Auth.auth().currentUser, !user.isAnonymous else { return }
-        guard AppFeatures.firebaseStorageUploadsEnabled else {
-            showAlert(title: "Photo Upload Paused", message: AppFeatures.storagePausedMessage)
-            return
-        }
 
-        profileImageView.image = image
-        ProfilePictureService.shared.uploadProfilePicture(uid: user.uid, image: image) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-
-                switch result {
-                case .success(let url):
-                    self.currentProfile.profilePictureUrl = url
-                    self.saveProfile()
-                case .failure(let error):
-                    self.showAlert(title: "Photo Upload Failed", message: error.localizedDescription)
-                }
-            }
+        do {
+            let avatarData = try ProfilePictureService.shared.makeFirestoreAvatarData(from: image)
+            currentProfile.profileImageData = avatarData
+            profileImageView.image = ProfilePictureService.shared.image(fromFirestoreData: avatarData)
+            saveProfile()
+        } catch {
+            showAlert(title: "Photo Not Saved", message: error.localizedDescription)
         }
     }
 }
