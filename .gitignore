@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.xcsettings
+
+# Build output
+DerivedData/
+build/
+
+# Generated vacancy review files
+imports/
+
+# Python tooling
+__pycache__/
+*.py[cod]
+
+# Local credentials
+*.p8
+firebase-service-account*.json

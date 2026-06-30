@@ -5,6 +5,8 @@
 
 import UIKit
 import FirebaseAuth
+import MessageUI
+import SafariServices
 
 class AutoApplyAssistantViewController: UIViewController {
 
@@ -14,6 +16,7 @@ class AutoApplyAssistantViewController: UIViewController {
     private let userProfile: UserProfile
     private let aiCareerService = AICareerService()
     private let firestoreService = FirestoreService()
+    private let pdfService = CVPDFService()
     private var autoApplyPackage: AutoApplyPackage?
     private var isSubmitting = false
 
@@ -27,6 +30,8 @@ class AutoApplyAssistantViewController: UIViewController {
     private lazy var contentStackView: UIStackView = {
         let stackView = UIStackView(arrangedSubviews: [
             jobCardView,
+            routeCardView,
+            checklistCardView,
             matchCardView,
             recommendationsCardView,
             cvCardView,
@@ -41,6 +46,8 @@ class AutoApplyAssistantViewController: UIViewController {
     }()
 
     private lazy var jobCardView = makeCardView()
+    private lazy var routeCardView = makeCardView()
+    private lazy var checklistCardView = makeCardView()
     private lazy var matchCardView = makeCardView()
     private lazy var recommendationsCardView = makeCardView()
     private lazy var cvCardView = makeCardView()
@@ -48,8 +55,28 @@ class AutoApplyAssistantViewController: UIViewController {
     private lazy var emailCardView = makeCardView()
     private lazy var approvalCardView = makeCardView()
 
-    private lazy var jobTitleLabel = makeSectionTitleLabel(text: "Application Package")
+    private lazy var jobTitleLabel = makeSectionTitleLabel(text: "Application Details")
     private lazy var jobSummaryLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .semibold), color: .secondaryLabel, lines: 0)
+    private lazy var routeIconView: UIImageView = {
+        let imageView = UIImageView()
+        imageView.tintColor = AppTheme.brand
+        imageView.backgroundColor = AppTheme.mutedSurface
+        imageView.contentMode = .center
+        imageView.layer.cornerRadius = AppTheme.cardRadius
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        return imageView
+    }()
+    private lazy var routeTitleLabel = makeSectionTitleLabel(text: "How You’ll Apply")
+    private lazy var routeMethodLabel = makeLabel(font: UIFont.systemFont(ofSize: 17, weight: .bold), color: .label, lines: 0)
+    private lazy var routeSummaryLabel = makeLabel(font: UIFont.systemFont(ofSize: 14, weight: .medium), color: AppTheme.secondaryText, lines: 0)
+    private lazy var checklistTitleLabel = makeSectionTitleLabel(text: "Required Document Checklist")
+    private lazy var checklistStackView: UIStackView = {
+        let stackView = UIStackView()
+        stackView.axis = .vertical
+        stackView.spacing = 8
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        return stackView
+    }()
 
     private lazy var scoreLabel: UILabel = {
         let label = makeLabel(font: UIFont.systemFont(ofSize: 42, weight: .bold), color: .systemGreen, lines: 1)
@@ -62,23 +89,55 @@ class AutoApplyAssistantViewController: UIViewController {
     private lazy var matchSummaryLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
     private lazy var recommendationsTitleLabel = makeSectionTitleLabel(text: "Recommendations")
     private lazy var recommendationsLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
-    private lazy var cvTitleLabel = makeSectionTitleLabel(text: "Tailored CV Draft")
-    private lazy var coverLetterTitleLabel = makeSectionTitleLabel(text: "Cover Letter")
-    private lazy var emailTitleLabel = makeSectionTitleLabel(text: "Recruiter Email Draft")
-    private lazy var approvalTitleLabel = makeSectionTitleLabel(text: "Final Approval")
+    private lazy var cvTitleLabel = makeSectionTitleLabel(text: "CV Attachment Preview")
+    private lazy var coverLetterTitleLabel = makeSectionTitleLabel(text: "Editable Cover Letter")
+    private lazy var emailTitleLabel = makeSectionTitleLabel(text: "Editable Application Email")
+    private lazy var approvalTitleLabel = makeSectionTitleLabel(text: "Before You Continue")
     private lazy var approvalLabel = makeLabel(font: UIFont.systemFont(ofSize: 15, weight: .medium), color: .secondaryLabel, lines: 0)
 
-    private lazy var cvTextView = makeTextView()
+    private lazy var cvTextView = makeTextView(isEditable: false)
     private lazy var coverLetterTextView = makeTextView()
     private lazy var emailTextView = makeTextView()
 
+    private lazy var copyCoverLetterButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.title = "Copy Cover Letter"
+        configuration.image = UIImage(systemName: "doc.on.doc")
+        configuration.imagePadding = 8
+        configuration.baseForegroundColor = AppTheme.brand
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 10,
+            leading: 12,
+            bottom: 10,
+            trailing: 12
+        )
+        button.configuration = configuration
+        button.addTarget(self, action: #selector(copyCoverLetterTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    private lazy var exportButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.configuration = AppTheme.primaryButtonConfiguration(
+            title: "Share Application Documents",
+            systemImageName: "square.and.arrow.up"
+        )
+        button.configuration?.baseBackgroundColor = AppTheme.mutedSurface
+        button.configuration?.baseForegroundColor = AppTheme.brand
+        button.addTarget(self, action: #selector(exportTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
     private lazy var approveButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setTitle("Approve & Submit Application", for: .normal)
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-        button.backgroundColor = .systemGray
-        button.layer.cornerRadius = 14
+        button.configuration = AppTheme.primaryButtonConfiguration(
+            title: "Preparing Application",
+            systemImageName: "arrow.right"
+        )
+        button.configuration?.baseBackgroundColor = .systemGray
         button.isEnabled = false
         button.addTarget(self, action: #selector(approveTapped), for: .touchUpInside)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -97,11 +156,24 @@ class AutoApplyAssistantViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        title = "Review Package"
+        view.backgroundColor = AppTheme.background
+        title = "Review Application"
         setupUI()
         configureLoadingState()
         preparePackage()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        #if DEBUG
+        let debugScroll = ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_AUTO_SCROLL"]
+        guard debugScroll == "cover-letter" else { return }
+
+        view.layoutIfNeeded()
+        let targetY = max(0, coverLetterCardView.frame.minY - 12)
+        scrollView.setContentOffset(CGPoint(x: 0, y: targetY), animated: false)
+        #endif
     }
 
     private func setupUI() {
@@ -110,6 +182,8 @@ class AutoApplyAssistantViewController: UIViewController {
         scrollView.addSubview(contentStackView)
 
         setupJobCard()
+        setupRouteCard()
+        setupChecklistCard()
         setupMatchCard()
         setupRecommendationsCard()
         setupCVCard()
@@ -149,6 +223,49 @@ class AutoApplyAssistantViewController: UIViewController {
             jobSummaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
             jobSummaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
             jobSummaryLabel.bottomAnchor.constraint(equalTo: jobCardView.bottomAnchor, constant: -16)
+        ])
+    }
+
+    private func setupRouteCard() {
+        routeCardView.addSubview(routeIconView)
+        routeCardView.addSubview(routeTitleLabel)
+        routeCardView.addSubview(routeMethodLabel)
+        routeCardView.addSubview(routeSummaryLabel)
+
+        NSLayoutConstraint.activate([
+            routeIconView.topAnchor.constraint(equalTo: routeCardView.topAnchor, constant: 16),
+            routeIconView.leadingAnchor.constraint(equalTo: routeCardView.leadingAnchor, constant: 16),
+            routeIconView.widthAnchor.constraint(equalToConstant: 48),
+            routeIconView.heightAnchor.constraint(equalToConstant: 48),
+
+            routeTitleLabel.topAnchor.constraint(equalTo: routeIconView.topAnchor),
+            routeTitleLabel.leadingAnchor.constraint(equalTo: routeIconView.trailingAnchor, constant: 14),
+            routeTitleLabel.trailingAnchor.constraint(equalTo: routeCardView.trailingAnchor, constant: -16),
+
+            routeMethodLabel.topAnchor.constraint(equalTo: routeTitleLabel.bottomAnchor, constant: 5),
+            routeMethodLabel.leadingAnchor.constraint(equalTo: routeTitleLabel.leadingAnchor),
+            routeMethodLabel.trailingAnchor.constraint(equalTo: routeTitleLabel.trailingAnchor),
+
+            routeSummaryLabel.topAnchor.constraint(equalTo: routeIconView.bottomAnchor, constant: 14),
+            routeSummaryLabel.leadingAnchor.constraint(equalTo: routeCardView.leadingAnchor, constant: 16),
+            routeSummaryLabel.trailingAnchor.constraint(equalTo: routeCardView.trailingAnchor, constant: -16),
+            routeSummaryLabel.bottomAnchor.constraint(equalTo: routeCardView.bottomAnchor, constant: -16)
+        ])
+    }
+
+    private func setupChecklistCard() {
+        checklistCardView.addSubview(checklistTitleLabel)
+        checklistCardView.addSubview(checklistStackView)
+
+        NSLayoutConstraint.activate([
+            checklistTitleLabel.topAnchor.constraint(equalTo: checklistCardView.topAnchor, constant: 16),
+            checklistTitleLabel.leadingAnchor.constraint(equalTo: checklistCardView.leadingAnchor, constant: 16),
+            checklistTitleLabel.trailingAnchor.constraint(equalTo: checklistCardView.trailingAnchor, constant: -16),
+
+            checklistStackView.topAnchor.constraint(equalTo: checklistTitleLabel.bottomAnchor, constant: 12),
+            checklistStackView.leadingAnchor.constraint(equalTo: checklistTitleLabel.leadingAnchor),
+            checklistStackView.trailingAnchor.constraint(equalTo: checklistTitleLabel.trailingAnchor),
+            checklistStackView.bottomAnchor.constraint(equalTo: checklistCardView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -209,6 +326,7 @@ class AutoApplyAssistantViewController: UIViewController {
     private func setupCoverLetterCard() {
         coverLetterCardView.addSubview(coverLetterTitleLabel)
         coverLetterCardView.addSubview(coverLetterTextView)
+        coverLetterCardView.addSubview(copyCoverLetterButton)
 
         NSLayoutConstraint.activate([
             coverLetterTitleLabel.topAnchor.constraint(equalTo: coverLetterCardView.topAnchor, constant: 16),
@@ -219,7 +337,10 @@ class AutoApplyAssistantViewController: UIViewController {
             coverLetterTextView.leadingAnchor.constraint(equalTo: coverLetterTitleLabel.leadingAnchor),
             coverLetterTextView.trailingAnchor.constraint(equalTo: coverLetterTitleLabel.trailingAnchor),
             coverLetterTextView.heightAnchor.constraint(equalToConstant: 260),
-            coverLetterTextView.bottomAnchor.constraint(equalTo: coverLetterCardView.bottomAnchor, constant: -16)
+
+            copyCoverLetterButton.topAnchor.constraint(equalTo: coverLetterTextView.bottomAnchor, constant: 8),
+            copyCoverLetterButton.trailingAnchor.constraint(equalTo: coverLetterTitleLabel.trailingAnchor),
+            copyCoverLetterButton.bottomAnchor.constraint(equalTo: coverLetterCardView.bottomAnchor, constant: -10)
         ])
     }
 
@@ -243,6 +364,7 @@ class AutoApplyAssistantViewController: UIViewController {
     private func setupApprovalCard() {
         approvalCardView.addSubview(approvalTitleLabel)
         approvalCardView.addSubview(approvalLabel)
+        approvalCardView.addSubview(exportButton)
 
         NSLayoutConstraint.activate([
             approvalTitleLabel.topAnchor.constraint(equalTo: approvalCardView.topAnchor, constant: 16),
@@ -252,18 +374,112 @@ class AutoApplyAssistantViewController: UIViewController {
             approvalLabel.topAnchor.constraint(equalTo: approvalTitleLabel.bottomAnchor, constant: 10),
             approvalLabel.leadingAnchor.constraint(equalTo: approvalTitleLabel.leadingAnchor),
             approvalLabel.trailingAnchor.constraint(equalTo: approvalTitleLabel.trailingAnchor),
-            approvalLabel.bottomAnchor.constraint(equalTo: approvalCardView.bottomAnchor, constant: -16)
+
+            exportButton.topAnchor.constraint(equalTo: approvalLabel.bottomAnchor, constant: 14),
+            exportButton.leadingAnchor.constraint(equalTo: approvalTitleLabel.leadingAnchor),
+            exportButton.trailingAnchor.constraint(equalTo: approvalTitleLabel.trailingAnchor),
+            exportButton.heightAnchor.constraint(equalToConstant: 50),
+            exportButton.bottomAnchor.constraint(equalTo: approvalCardView.bottomAnchor, constant: -16)
         ])
     }
 
     private func configureLoadingState() {
-        jobSummaryLabel.text = "\(job.title)\n\(job.companyName)\n\(job.locationText)"
-        matchSummaryLabel.text = "Preparing your job fit score, tailored CV, cover letter, and email draft."
+        jobSummaryLabel.text = "\(job.title)\n\(job.companyName)\n\(job.locationText)\n\(job.salaryText)"
+        routeIconView.image = UIImage(systemName: job.applicationRoute.systemImageName)
+        routeMethodLabel.text = job.applicationMethod.reviewTitle
+        routeSummaryLabel.text = applicationRouteSummary()
+        emailCardView.isHidden = job.applicationRoute != .email
+        configureChecklist()
+        matchSummaryLabel.text = "Checking the vacancy against evidence in your profile."
         recommendationsLabel.text = "Loading recommendations..."
-        cvTextView.text = "Preparing tailored CV draft..."
+        cvTextView.text = "Preparing CV preview..."
         coverLetterTextView.text = "Preparing cover letter..."
         emailTextView.text = "Preparing email draft..."
         approvalLabel.text = approvalText()
+    }
+
+    private func configureChecklist() {
+        checklistStackView.arrangedSubviews.forEach {
+            checklistStackView.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+
+        let checklistItems = requiredChecklistItems()
+        checklistCardView.isHidden = checklistItems.isEmpty
+
+        checklistItems.forEach { item in
+            let button = UIButton(type: .system)
+            var configuration = UIButton.Configuration.plain()
+            configuration.title = item
+            configuration.image = UIImage(systemName: "circle")
+            configuration.imagePadding = 10
+            configuration.imagePlacement = .leading
+            configuration.baseForegroundColor = .label
+            configuration.contentInsets = NSDirectionalEdgeInsets(
+                top: 9,
+                leading: 0,
+                bottom: 9,
+                trailing: 0
+            )
+            configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+                var updatedAttributes = attributes
+                updatedAttributes.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+                return updatedAttributes
+            }
+            button.configuration = configuration
+            button.contentHorizontalAlignment = .leading
+            button.addTarget(self, action: #selector(checklistItemTapped(_:)), for: .touchUpInside)
+            checklistStackView.addArrangedSubview(button)
+        }
+    }
+
+    private func requiredChecklistItems() -> [String] {
+        var items = job.application.requiredForms + job.application.requiredDocuments
+
+        if job.application.requiresZ83
+            || job.application.formName.lowercased().contains("z83")
+            || job.description.lowercased().contains("z83") {
+            items.removeAll { $0.lowercased().contains("z83") }
+            items.append("Completed and signed Z83 form")
+            let reference = job.application.referenceNumber
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            items.append(
+                reference.isEmpty
+                    ? "Vacancy reference number checked"
+                    : "Reference \(reference) confirmed"
+            )
+        }
+
+        if job.application.requiresCV || items.isEmpty {
+            items.append("Tailored CV")
+        }
+
+        if job.application.requiresCoverLetter {
+            items.append("Tailored cover letter")
+        }
+
+        if job.application.requiresCertifiedDocuments {
+            items.append("Certified supporting documents")
+        }
+
+        if job.application.requiresDriversLicense {
+            items.append("Driver’s licence copy")
+        }
+
+        guard job.requiresGovernmentFlow
+                || job.applicationRoute == .requiredForm
+                || job.applicationRoute == .manual
+                || !job.application.requiredDocuments.isEmpty else {
+            return []
+        }
+
+        var seen = Set<String>()
+        return items.filter {
+            let key = $0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }
     }
 
     private func preparePackage() {
@@ -288,14 +504,27 @@ class AutoApplyAssistantViewController: UIViewController {
         coverLetterTextView.text = package.coverLetterText
         emailTextView.text = "Subject: \(package.emailSubject)\n\n\(package.emailBody)"
         approveButton.isEnabled = true
-        approveButton.backgroundColor = .systemGreen
+        approveButton.configuration?.title = job.applicationRoute.actionTitle
+        approveButton.configuration?.baseBackgroundColor = AppTheme.brand
+
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_GENERATE_DOCUMENTS"] == "1" {
+            do {
+                try generatedDocumentURLs().forEach {
+                    print("LET_APPLY_DEBUG_DOCUMENT=\($0.path)")
+                }
+            } catch {
+                print("LET_APPLY_DEBUG_DOCUMENT_ERROR=\(error.localizedDescription)")
+            }
+        }
+        #endif
     }
 
     private func makeCardView() -> UIView {
         let view = UIView()
-        view.backgroundColor = .secondarySystemBackground
-        view.layer.cornerRadius = 16
-        view.layer.borderColor = UIColor.systemGray5.cgColor
+        view.backgroundColor = AppTheme.surface
+        view.layer.cornerRadius = AppTheme.cardRadius
+        view.layer.borderColor = AppTheme.border.cgColor
         view.layer.borderWidth = 1
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
@@ -316,13 +545,15 @@ class AutoApplyAssistantViewController: UIViewController {
         return label
     }
 
-    private func makeTextView() -> UITextView {
+    private func makeTextView(isEditable: Bool = true) -> UITextView {
         let textView = UITextView()
         textView.font = UIFont.systemFont(ofSize: 14, weight: .regular)
         textView.textColor = .label
-        textView.backgroundColor = .systemBackground
-        textView.layer.cornerRadius = 12
-        textView.layer.borderColor = UIColor.systemGray5.cgColor
+        textView.backgroundColor = AppTheme.background
+        textView.isEditable = isEditable
+        textView.isSelectable = true
+        textView.layer.cornerRadius = AppTheme.cardRadius
+        textView.layer.borderColor = AppTheme.border.cgColor
         textView.layer.borderWidth = 1
         textView.textContainerInset = UIEdgeInsets(top: 12, left: 10, bottom: 12, right: 10)
         textView.translatesAutoresizingMaskIntoConstraints = false
@@ -337,12 +568,56 @@ class AutoApplyAssistantViewController: UIViewController {
         return items.map { "- \($0)" }.joined(separator: "\n")
     }
 
-    private func approvalText() -> String {
-        if AppFeatures.firebaseStorageUploadsEnabled {
-            return "Review every section. When you approve, Let’s Apply stores the submitted package in your application tracker."
+    private func applicationRouteSummary() -> String {
+        if job.requiresGovernmentFlow {
+            switch job.applicationMethod {
+            case .governmentEmail:
+                return "Review the government checklist first. Submit Application then opens a prepared email with your CV and cover letter attached for your approval."
+            case .governmentWebsite:
+                return "Review the government checklist and save your documents. Submit Application then opens the official vacancy website."
+            case .governmentManual, .pdfCircular:
+                return job.application.applicationInstructions.isEmpty
+                    ? "Review the circular, Z83 requirements, supporting documents, reference number, and delivery instructions before continuing."
+                    : job.application.applicationInstructions
+            default:
+                break
+            }
         }
 
-        return "Review every section. PDF upload is paused on the free plan, so this application will use your profile CV draft, cover letter, and recruiter email text."
+        switch job.applicationRoute {
+        case .inApp:
+            return "Your application will be submitted in Let’s Apply and added to your application tracker."
+        case .email:
+            return "A ready-to-send email will open with the employer’s address, your message, CV, and cover letter. You review it and tap Send."
+        case .externalPortal:
+            return "The employer’s website will open for you to complete its questions and attach the documents prepared here."
+        case .requiredForm:
+            let formName = job.application.formName.isEmpty ? "the required employment form" : job.application.formName
+            let requiredItems = job.application.requiredForms + job.application.requiredDocuments
+            let documents = requiredItems.isEmpty
+                ? "your CV and cover letter"
+                : requiredItems.joined(separator: ", ")
+            return "This vacancy requires \(formName). Let’s Apply prepares \(documents), but declarations and signatures remain under your control."
+        case .manual:
+            return job.application.applicationInstructions.isEmpty
+                ? "This employer provided manual application instructions. Let’s Apply will prepare the documents and keep the final action under your control."
+                : job.application.applicationInstructions
+        }
+    }
+
+    private func approvalText() -> String {
+        switch job.applicationRoute {
+        case .inApp:
+            return "Review every section before submitting. Let’s Apply will never send an application without your approval."
+        case .email:
+            return "Mail opens next with your documents attached. The application is tracked only after Mail confirms that you sent it."
+        case .externalPortal:
+            return "Share or save your documents first if needed. The employer’s application website opens when you continue."
+        case .requiredForm:
+            return "Export the prepared documents, open the required form, and check every declaration before signing or submitting."
+        case .manual:
+            return "Review the employer’s instructions carefully. You can export the CV and cover letter before completing the requested manual steps."
+        }
     }
 
     private func emailDraftParts() -> (subject: String?, body: String?) {
@@ -362,7 +637,7 @@ class AutoApplyAssistantViewController: UIViewController {
     @objc private func approveTapped() {
         guard !isSubmitting else { return }
         guard autoApplyPackage != nil else {
-            showAlert(title: "Package Not Ready", message: "Please wait for the assistant to finish preparing your package.")
+            showAlert(title: "Application Not Ready", message: "Please wait while Let’s Apply finishes preparing your documents.")
             return
         }
 
@@ -371,19 +646,98 @@ class AutoApplyAssistantViewController: UIViewController {
             return
         }
 
+        let confirmation = confirmationContent()
         let alert = UIAlertController(
-            title: "Approve Application",
-            message: "This will submit the reviewed package to your application tracker. Let’s Apply will not send anything until you approve.",
+            title: confirmation.title,
+            message: confirmation.message,
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "Submit", style: .default) { [weak self] _ in
-            self?.submitApprovedPackage()
+        alert.addAction(UIAlertAction(title: confirmation.actionTitle, style: .default) { [weak self] _ in
+            self?.continueApprovedPackage()
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
 
-    private func submitApprovedPackage() {
+    @objc private func exportTapped() {
+        presentDocumentExport(openDestinationAfter: false)
+    }
+
+    @objc private func copyCoverLetterTapped() {
+        UIPasteboard.general.string = coverLetterTextView.text
+        showAlert(
+            title: "Cover Letter Copied",
+            message: "The cover letter is ready to paste into an employer form or application website."
+        )
+    }
+
+    @objc private func checklistItemTapped(_ sender: UIButton) {
+        sender.isSelected.toggle()
+        sender.configuration?.image = UIImage(
+            systemName: sender.isSelected ? "checkmark.circle.fill" : "circle"
+        )
+        sender.configuration?.baseForegroundColor = sender.isSelected ? AppTheme.brand : .label
+    }
+
+    private func confirmationContent() -> (title: String, message: String, actionTitle: String) {
+        switch job.applicationRoute {
+        case .inApp:
+            return (
+                "Submit Application?",
+                "Your reviewed application will be submitted in Let’s Apply and recorded in your tracker.",
+                "Submit"
+            )
+        case .email:
+            return (
+                "Open Email Application?",
+                "Let’s Apply will prepare the recipient, subject, message, CV, and cover letter. You will review everything again before tapping Send.",
+                "Open Email"
+            )
+        case .externalPortal:
+            return (
+                "Continue on Employer Website?",
+                "Your application will be saved as ready to continue, then the employer’s website will open for its questions and declarations.",
+                "Open Website"
+            )
+        case .requiredForm:
+            return (
+                "Prepare Required Form?",
+                "Your CV and cover letter will be available to export before the official application form opens. You remain in control of declarations and signatures.",
+                "Prepare"
+            )
+        case .manual:
+            return (
+                "View Employer Instructions?",
+                "Let’s Apply will save this application as a draft and show the employer’s instructions. Nothing will be submitted automatically.",
+                "View Instructions"
+            )
+        }
+    }
+
+    private func continueApprovedPackage() {
+        switch job.applicationRoute {
+        case .inApp:
+            saveApplication(status: "submitted") { [weak self] in
+                self?.onApplicationSubmitted?()
+                self?.showSuccessAlert()
+            }
+        case .email:
+            openEmailApplication()
+        case .externalPortal, .requiredForm:
+            saveApplication(status: "ready-to-submit") { [weak self] in
+                self?.openApplicationDestination()
+            }
+        case .manual:
+            saveApplication(status: "requires-manual-action") { [weak self] in
+                self?.showManualInstructions()
+            }
+        }
+    }
+
+    private func saveApplication(
+        status: String,
+        completion: @escaping () -> Void
+    ) {
         setSubmitting(true)
         let emailDraft = emailDraftParts()
 
@@ -395,7 +749,10 @@ class AutoApplyAssistantViewController: UIViewController {
             tailoredCVText: cvTextView.text,
             recruiterEmailSubject: emailDraft.subject,
             recruiterEmailBody: emailDraft.body,
-            matchScore: autoApplyPackage?.matchScore
+            matchScore: autoApplyPackage?.matchScore,
+            status: status,
+            applicationMethod: job.applicationMethod.rawValue,
+            applicationDestination: applicationDestination()
         ) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -403,8 +760,7 @@ class AutoApplyAssistantViewController: UIViewController {
 
                 switch result {
                 case .success:
-                    self.onApplicationSubmitted?()
-                    self.showSuccessAlert()
+                    completion()
                 case .failure(let error):
                     self.showAlert(title: "Application Not Submitted", message: error.localizedDescription)
                 }
@@ -412,17 +768,185 @@ class AutoApplyAssistantViewController: UIViewController {
         }
     }
 
+    private func openEmailApplication() {
+        guard MFMailComposeViewController.canSendMail() else {
+            showEmailFallbackAlert()
+            return
+        }
+
+        do {
+            let urls = try generatedDocumentURLs()
+            let emailDraft = emailDraftParts()
+            let composer = MFMailComposeViewController()
+            composer.mailComposeDelegate = self
+            composer.setToRecipients([job.application.applicationEmail])
+            composer.setSubject(emailDraft.subject ?? "Application for \(job.title)")
+            composer.setMessageBody(emailDraft.body ?? "", isHTML: false)
+
+            for url in urls {
+                let data = try Data(contentsOf: url)
+                composer.addAttachmentData(
+                    data,
+                    mimeType: "application/pdf",
+                    fileName: url.lastPathComponent
+                )
+            }
+
+            present(composer, animated: true)
+        } catch {
+            showAlert(title: "Documents Not Ready", message: error.localizedDescription)
+        }
+    }
+
+    private func showEmailFallbackAlert() {
+        let alert = UIAlertController(
+            title: "Mail Is Not Set Up",
+            message: "Export the CV and cover letter, then attach them in your preferred email app. The recruiter email and draft remain available on this screen.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Export Documents", style: .default) { [weak self] _ in
+            self?.presentDocumentExport(openDestinationAfter: false)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showManualInstructions() {
+        let instructions = manualInstructionsText()
+        let alert = UIAlertController(
+            title: "Application Instructions",
+            message: instructions.isEmpty
+                ? "Export your application documents and follow the instructions in the vacancy advert."
+                : instructions,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Export Documents", style: .default) { [weak self] _ in
+            self?.presentDocumentExport(openDestinationAfter: false)
+        })
+        alert.addAction(UIAlertAction(title: "Done", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func manualInstructionsText() -> String {
+        let values = [
+            job.application.applicationInstructions,
+            job.application.referenceNumber.isEmpty
+                ? ""
+                : "Reference: \(job.application.referenceNumber)",
+            job.application.postalAddress.isEmpty
+                ? ""
+                : "Postal address: \(job.application.postalAddress)",
+            job.application.handDeliveryAddress.isEmpty
+                ? ""
+                : "Hand delivery: \(job.application.handDeliveryAddress)"
+        ]
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+        return values.joined(separator: "\n\n")
+    }
+
+    private func generatedDocumentURLs() throws -> [URL] {
+        var tailoredProfile = userProfile
+        tailoredProfile.jobTitle = job.title
+
+        let cvURL = try pdfService.generateCV(for: tailoredProfile)
+        let coverLetterURL = try pdfService.generateCoverLetter(
+            for: tailoredProfile,
+            job: job,
+            text: coverLetterTextView.text ?? ""
+        )
+        return [cvURL, coverLetterURL]
+    }
+
+    private func presentDocumentExport(openDestinationAfter: Bool) {
+        do {
+            let urls = try generatedDocumentURLs()
+            let activityController = UIActivityViewController(
+                activityItems: urls,
+                applicationActivities: nil
+            )
+            activityController.popoverPresentationController?.sourceView = exportButton
+            activityController.completionWithItemsHandler = { [weak self] _, completed, _, _ in
+                guard openDestinationAfter, completed else { return }
+                self?.openApplicationDestination()
+            }
+            present(activityController, animated: true)
+        } catch {
+            showAlert(title: "Export Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func openApplicationDestination() {
+        guard let url = applicationDestinationURL() else {
+            showAlert(
+                title: "Application Destination Missing",
+                message: "This vacancy does not include a valid form or employer website. Your documents are ready to share manually."
+            )
+            return
+        }
+
+        present(SFSafariViewController(url: url), animated: true)
+    }
+
+    private func applicationDestinationURL() -> URL? {
+        let rawURL = job.application.applicationUrl
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !rawURL.isEmpty {
+            return URL(string: rawURL)
+        }
+
+        let formText = """
+        \(job.application.formName)
+        \(job.application.requiredForms.joined(separator: " "))
+        \(job.application.requiredDocuments.joined(separator: " "))
+        """
+            .lowercased()
+        if job.application.requiresZ83 || formText.contains("z83") {
+            return URL(string: "https://www.dpsa.gov.za/dpsa2g/documents/vacancies/editable%20Approved%20New%20Z83%20form%20Gazetted%206%20Nov%202020.pdf")
+        }
+
+        return nil
+    }
+
+    private func applicationDestination() -> String? {
+        switch job.applicationRoute {
+        case .email:
+            return job.application.applicationEmail
+        case .externalPortal, .requiredForm:
+            return applicationDestinationURL()?.absoluteString
+        case .inApp:
+            return "Let’s Apply"
+        case .manual:
+            return job.application.applicationInstructions
+        }
+    }
+
     private func setSubmitting(_ submitting: Bool) {
         isSubmitting = submitting
         approveButton.isEnabled = !submitting
-        approveButton.backgroundColor = submitting ? .systemGray : .systemGreen
-        approveButton.setTitle(submitting ? "Submitting..." : "Approve & Submit Application", for: .normal)
+        exportButton.isEnabled = !submitting
+        approveButton.configuration?.baseBackgroundColor = submitting ? .systemGray : AppTheme.brand
+        approveButton.configuration?.title = submitting
+            ? job.applicationRoute.progressTitle
+            : job.applicationRoute.actionTitle
     }
 
     private func showSuccessAlert() {
+        let message: String
+        switch job.applicationRoute {
+        case .email:
+            message = "Mail confirmed that your application email was sent. It is now recorded in your tracker."
+        case .inApp:
+            message = "Your application was submitted in Let’s Apply and added to your tracker."
+        default:
+            message = "Your application has been updated in your tracker."
+        }
+
         let alert = UIAlertController(
             title: "Application Submitted",
-            message: "Your reviewed application package has been added to your tracker.",
+            message: message,
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "View Applications", style: .default) { [weak self] _ in
@@ -441,5 +965,47 @@ class AutoApplyAssistantViewController: UIViewController {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+extension AutoApplyAssistantViewController: MFMailComposeViewControllerDelegate {
+
+    func mailComposeController(
+        _ controller: MFMailComposeViewController,
+        didFinishWith result: MFMailComposeResult,
+        error: Error?
+    ) {
+        controller.dismiss(animated: true) { [weak self] in
+            guard let self = self else { return }
+
+            if let error = error {
+                self.showAlert(title: "Email Not Sent", message: error.localizedDescription)
+                return
+            }
+
+            switch result {
+            case .sent:
+                self.saveApplication(status: "applied-by-email") {
+                    self.onApplicationSubmitted?()
+                    self.showSuccessAlert()
+                }
+            case .saved:
+                self.saveApplication(status: "email-draft") {
+                    self.showAlert(
+                        title: "Email Draft Saved",
+                        message: "Your email draft is saved in Mail and listed in your Let’s Apply tracker."
+                    )
+                }
+            case .failed:
+                self.showAlert(
+                    title: "Email Not Sent",
+                    message: "Mail could not send this application. Export the documents and try your preferred email app."
+                )
+            case .cancelled:
+                break
+            @unknown default:
+                break
+            }
+        }
     }
 }

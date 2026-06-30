@@ -10,10 +10,58 @@ import UIKit
 import FirebaseStorage
 
 class ProfilePictureService {
+
+    enum ProfilePictureError: LocalizedError {
+        case invalidImage
+        case imageTooLarge
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidImage:
+                return "The selected photo could not be processed."
+            case .imageTooLarge:
+                return "The selected photo is too large. Choose a smaller image and try again."
+            }
+        }
+    }
     
     static let shared = ProfilePictureService()
     
     private init() {}
+
+    func makeFirestoreAvatarData(from image: UIImage) throws -> Data {
+        let maximumDimension: CGFloat = 320
+        let sourceSize = image.size
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            throw ProfilePictureError.invalidImage
+        }
+
+        let scale = min(
+            1,
+            maximumDimension / max(sourceSize.width, sourceSize.height)
+        )
+        let targetSize = CGSize(
+            width: max(1, floor(sourceSize.width * scale)),
+            height: max(1, floor(sourceSize.height * scale))
+        )
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+
+        for quality in [0.72, 0.58, 0.44, 0.32] {
+            if let data = resizedImage.jpegData(compressionQuality: quality),
+               data.count <= 180_000 {
+                return data
+            }
+        }
+
+        throw ProfilePictureError.imageTooLarge
+    }
+
+    func image(fromFirestoreData data: Data) -> UIImage? {
+        return UIImage(data: data)
+    }
     
     func uploadProfilePicture(uid: String, image: UIImage, completion: @escaping (Result<String, Error>) -> Void) {
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {

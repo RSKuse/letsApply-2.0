@@ -11,17 +11,17 @@ class SplashViewController: UIViewController {
 
     private lazy var markContainerView: UIView = {
         let view = UIView()
-        view.backgroundColor = AppTheme.brandBright
-        view.layer.cornerRadius = AppTheme.cardRadius
+        view.backgroundColor = .clear
+        view.layer.cornerRadius = 18
+        view.clipsToBounds = true
         view.alpha = 0
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
 
     private lazy var logoImageView: UIImageView = {
-        let imageView = UIImageView(image: UIImage(systemName: "briefcase.fill"))
-        imageView.tintColor = AppTheme.ink
-        imageView.contentMode = .scaleAspectFit
+        let imageView = UIImageView(image: UIImage(named: "app_logo"))
+        imageView.contentMode = .scaleAspectFill
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
@@ -90,8 +90,8 @@ class SplashViewController: UIViewController {
 
             logoImageView.centerXAnchor.constraint(equalTo: markContainerView.centerXAnchor),
             logoImageView.centerYAnchor.constraint(equalTo: markContainerView.centerYAnchor),
-            logoImageView.widthAnchor.constraint(equalToConstant: 42),
-            logoImageView.heightAnchor.constraint(equalToConstant: 42),
+            logoImageView.widthAnchor.constraint(equalTo: markContainerView.widthAnchor),
+            logoImageView.heightAnchor.constraint(equalTo: markContainerView.heightAnchor),
 
             eyebrowLabel.topAnchor.constraint(equalTo: markContainerView.bottomAnchor, constant: 28),
             eyebrowLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),

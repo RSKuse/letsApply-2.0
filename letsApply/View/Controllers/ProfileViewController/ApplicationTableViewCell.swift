@@ -11,9 +11,9 @@ class ApplicationTableViewCell: UITableViewCell {
 
     private lazy var cardView: UIView = {
         let view = UIView()
-        view.backgroundColor = .secondarySystemBackground
-        view.layer.cornerRadius = 16
-        view.layer.borderColor = UIColor.systemGray5.cgColor
+        view.backgroundColor = AppTheme.surface
+        view.layer.cornerRadius = AppTheme.cardRadius
+        view.layer.borderColor = AppTheme.border.cgColor
         view.layer.borderWidth = 1
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
@@ -21,10 +21,10 @@ class ApplicationTableViewCell: UITableViewCell {
 
     private lazy var iconView: UIImageView = {
         let imageView = UIImageView(image: UIImage(systemName: "paperplane.fill"))
-        imageView.tintColor = .systemGreen
-        imageView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
+        imageView.tintColor = AppTheme.brand
+        imageView.backgroundColor = AppTheme.mutedSurface
         imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = 18
+        imageView.layer.cornerRadius = AppTheme.cardRadius
         imageView.clipsToBounds = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
@@ -35,16 +35,16 @@ class ApplicationTableViewCell: UITableViewCell {
     private lazy var dateLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .medium), color: .secondaryLabel, lines: 1)
 
     private lazy var statusLabel: UILabel = {
-        let label = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .bold), color: .systemGreen, lines: 1)
+        let label = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .bold), color: AppTheme.brand, lines: 1)
         label.textAlignment = .center
-        label.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.12)
-        label.layer.cornerRadius = 10
+        label.backgroundColor = AppTheme.mutedSurface
+        label.layer.cornerRadius = AppTheme.cardRadius
         label.clipsToBounds = true
         return label
     }()
 
     private lazy var cvLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: .secondaryLabel, lines: 1)
-    private lazy var packageLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: .systemGreen, lines: 1)
+    private lazy var detailsLabel = makeLabel(font: UIFont.systemFont(ofSize: 12, weight: .semibold), color: AppTheme.brand, lines: 2)
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -65,7 +65,7 @@ class ApplicationTableViewCell: UITableViewCell {
         cardView.addSubview(dateLabel)
         cardView.addSubview(statusLabel)
         cardView.addSubview(cvLabel)
-        cardView.addSubview(packageLabel)
+        cardView.addSubview(detailsLabel)
 
         NSLayoutConstraint.activate([
             cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
@@ -99,10 +99,10 @@ class ApplicationTableViewCell: UITableViewCell {
             cvLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             cvLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
 
-            packageLabel.topAnchor.constraint(equalTo: cvLabel.bottomAnchor, constant: 6),
-            packageLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            packageLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
-            packageLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
+            detailsLabel.topAnchor.constraint(equalTo: cvLabel.bottomAnchor, constant: 6),
+            detailsLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailsLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
+            detailsLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -118,22 +118,87 @@ class ApplicationTableViewCell: UITableViewCell {
     func configure(with application: Application) {
         titleLabel.text = application.jobTitle
         companyLabel.text = application.companyName
-        dateLabel.text = "Applied \(formattedDate(application.appliedDate))"
-        statusLabel.text = application.status.capitalized
+        dateLabel.text = "\(datePrefix(for: application.status)) \(formattedDate(application.appliedDate))"
+        configureStatus(application.status)
         cvLabel.text = application.cvUrl == nil ? "Profile CV draft used" : "CV attached"
-        packageLabel.text = packageText(for: application)
+        detailsLabel.text = applicationDetailsText(for: application)
     }
 
-    private func packageText(for application: Application) -> String {
+    private func configureStatus(_ status: String) {
+        let normalized = status.lowercased()
+        let isSubmitted = ["submitted", "sent", "applied-by-email", "applied-externally"]
+            .contains(normalized)
+
+        statusLabel.text = statusDisplayText(normalized)
+        statusLabel.textColor = isSubmitted ? AppTheme.brand : UIColor.systemOrange
+        statusLabel.backgroundColor = isSubmitted
+            ? AppTheme.mutedSurface
+            : UIColor.systemOrange.withAlphaComponent(0.12)
+        iconView.image = UIImage(
+            systemName: isSubmitted ? "paperplane.fill" : "doc.badge.clock.fill"
+        )
+    }
+
+    private func statusDisplayText(_ status: String) -> String {
+        switch status {
+        case "ready-to-submit":
+            return "Continue"
+        case "requires-manual-action":
+            return "Action Needed"
+        case "email-draft":
+            return "Email Draft"
+        case "submitted", "sent":
+            return "Submitted"
+        default:
+            return status
+                .replacingOccurrences(of: "-", with: " ")
+                .capitalized
+        }
+    }
+
+    private func datePrefix(for status: String) -> String {
+        switch status.lowercased() {
+        case "submitted", "sent", "applied-by-email", "applied-externally":
+            return "Applied"
+        default:
+            return "Prepared"
+        }
+    }
+
+    private func applicationDetailsText(for application: Application) -> String {
         guard application.isAIGenerated == true else {
             return "Standard application"
         }
 
         if let matchScore = application.matchScore {
-            return "Smart package - \(matchScore)% match"
+            let method = applicationMethodDisplay(application.applicationMethod)
+            return "\(method) application · \(matchScore)% match"
         }
 
-        return "Smart package submitted"
+        return "AI-assisted application"
+    }
+
+    private func applicationMethodDisplay(_ method: String?) -> String {
+        switch method {
+        case JobApplicationMethod.email.rawValue:
+            return "Email"
+        case JobApplicationMethod.externalWebsite.rawValue, JobApplicationRoute.externalPortal.rawValue:
+            return "Employer website"
+        case JobApplicationMethod.governmentEmail.rawValue:
+            return "Government email"
+        case JobApplicationMethod.governmentWebsite.rawValue:
+            return "Government website"
+        case JobApplicationMethod.governmentManual.rawValue, JobApplicationMethod.pdfCircular.rawValue:
+            return "Government"
+        case JobApplicationRoute.requiredForm.rawValue:
+            return "Required form"
+        case JobApplicationMethod.manualInstruction.rawValue, JobApplicationRoute.manual.rawValue:
+            return "Manual"
+        case JobApplicationMethod.internalApply.rawValue, JobApplicationRoute.inApp.rawValue:
+            return "In-app"
+        default:
+            return "Application"
+        }
     }
 
     private func formattedDate(_ dateText: String) -> String {

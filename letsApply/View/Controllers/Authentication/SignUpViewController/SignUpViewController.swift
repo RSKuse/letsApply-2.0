@@ -126,7 +126,10 @@ class SignUpViewController: UIViewController {
 
             if let error = error {
                 DispatchQueue.main.async {
-                    self.showAlert(title: "Sign Up Failed", message: error.localizedDescription)
+                    self.showAlert(
+                        title: "Sign Up Failed",
+                        message: FirebaseAuthenticationService.userMessage(for: error)
+                    )
                 }
                 return
             }

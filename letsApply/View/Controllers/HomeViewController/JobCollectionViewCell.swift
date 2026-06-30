@@ -36,7 +36,8 @@ class JobCollectionViewCell: UICollectionViewCell {
         label.font = UIFont.systemFont(ofSize: 11, weight: .bold)
         label.textColor = AppTheme.brand
         label.textAlignment = .right
-        label.numberOfLines = 1
+        label.numberOfLines = 2
+        label.lineBreakMode = .byWordWrapping
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -125,6 +126,7 @@ class JobCollectionViewCell: UICollectionViewCell {
 
             salaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
             salaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
+            salaryLabel.topAnchor.constraint(greaterThanOrEqualTo: locationLabel.bottomAnchor, constant: 8),
             salaryLabel.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14)
         ])
     }

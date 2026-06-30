@@ -26,6 +26,7 @@ class CVBuilderViewController: UIViewController {
             introStackView,
             templateCardView,
             profileCardView,
+            skillsCardView,
             sectionsCardView,
             summaryCardView,
             localModeCardView,
@@ -64,6 +65,7 @@ class CVBuilderViewController: UIViewController {
 
     private lazy var templateCardView = makeCardView(backgroundColor: AppTheme.ink)
     private lazy var profileCardView = makeCardView()
+    private lazy var skillsCardView = makeCardView()
     private lazy var sectionsCardView = makeCardView()
     private lazy var summaryCardView = makeCardView()
     private lazy var localModeCardView = makeCardView(backgroundColor: AppTheme.mutedSurface)
@@ -121,6 +123,31 @@ class CVBuilderViewController: UIViewController {
     }()
 
     private lazy var sectionsTitleLabel = makeSectionTitleLabel(text: "CV Sections")
+
+    private lazy var skillsTitleLabel = makeSectionTitleLabel(text: "Core Skills")
+
+    private lazy var skillsDetailLabel: UILabel = {
+        let label = UILabel()
+        label.text = "Add one skill per line. These power job matching and ATS analysis."
+        label.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = AppTheme.secondaryText
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var skillsTextView: UITextView = {
+        let textView = UITextView()
+        textView.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+        textView.textColor = .label
+        textView.backgroundColor = AppTheme.background
+        textView.layer.cornerRadius = AppTheme.cardRadius
+        textView.layer.borderWidth = 1
+        textView.layer.borderColor = AppTheme.border.cgColor
+        textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        return textView
+    }()
 
     private lazy var experienceButton = makeSectionButton(
         section: .experience,
@@ -238,10 +265,21 @@ class CVBuilderViewController: UIViewController {
         setupUI()
         setupTemplateCard()
         setupProfileCard()
+        setupSkillsCard()
         setupSectionsCard()
         setupSummaryCard()
         setupLocalModeCard()
         fetchProfile()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_CV_SCROLL"] == "sections" else {
+            return
+        }
+        scrollView.setContentOffset(CGPoint(x: 0, y: 720), animated: false)
+        #endif
     }
 
     private func setupUI() {
@@ -343,6 +381,28 @@ class CVBuilderViewController: UIViewController {
         ])
     }
 
+    private func setupSkillsCard() {
+        skillsCardView.addSubview(skillsTitleLabel)
+        skillsCardView.addSubview(skillsDetailLabel)
+        skillsCardView.addSubview(skillsTextView)
+
+        NSLayoutConstraint.activate([
+            skillsTitleLabel.topAnchor.constraint(equalTo: skillsCardView.topAnchor, constant: 16),
+            skillsTitleLabel.leadingAnchor.constraint(equalTo: skillsCardView.leadingAnchor, constant: 16),
+            skillsTitleLabel.trailingAnchor.constraint(equalTo: skillsCardView.trailingAnchor, constant: -16),
+
+            skillsDetailLabel.topAnchor.constraint(equalTo: skillsTitleLabel.bottomAnchor, constant: 6),
+            skillsDetailLabel.leadingAnchor.constraint(equalTo: skillsTitleLabel.leadingAnchor),
+            skillsDetailLabel.trailingAnchor.constraint(equalTo: skillsTitleLabel.trailingAnchor),
+
+            skillsTextView.topAnchor.constraint(equalTo: skillsDetailLabel.bottomAnchor, constant: 12),
+            skillsTextView.leadingAnchor.constraint(equalTo: skillsTitleLabel.leadingAnchor),
+            skillsTextView.trailingAnchor.constraint(equalTo: skillsTitleLabel.trailingAnchor),
+            skillsTextView.heightAnchor.constraint(equalToConstant: 132),
+            skillsTextView.bottomAnchor.constraint(equalTo: skillsCardView.bottomAnchor, constant: -16)
+        ])
+    }
+
     private func setupSummaryCard() {
         summaryCardView.addSubview(summaryTitleLabel)
         summaryCardView.addSubview(summaryTextView)
@@ -405,6 +465,7 @@ class CVBuilderViewController: UIViewController {
 
     private func configure(with profile: UserProfile) {
         currentProfile = profile
+        skillsTextView.text = profile.skills.joined(separator: "\n")
         summaryTextView.text = profile.professionalSummary.isEmpty
             ? "Professional summary"
             : profile.professionalSummary
@@ -465,7 +526,13 @@ class CVBuilderViewController: UIViewController {
         return "\(count) \(singular)\(count == 1 ? "" : "s")"
     }
 
-    private func updateProfileSummary() {
+    private func updateEditableProfileContent() {
+        currentProfile.skills = skillsTextView.text
+            .components(separatedBy: .newlines)
+            .flatMap { $0.components(separatedBy: ",") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
         let summary = summaryTextView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         currentProfile.professionalSummary = summary == "Professional summary" ? "" : summary
     }
@@ -695,7 +762,7 @@ class CVBuilderViewController: UIViewController {
     }
 
     @objc private func previewCVTapped() {
-        updateProfileSummary()
+        updateEditableProfileContent()
 
         do {
             let pdfURL = try pdfService.generateCV(for: currentProfile)
@@ -713,7 +780,7 @@ class CVBuilderViewController: UIViewController {
             return
         }
 
-        updateProfileSummary()
+        updateEditableProfileContent()
         firestoreService.saveUserProfile(currentProfile) { [weak self] error in
             DispatchQueue.main.async {
                 if let error {

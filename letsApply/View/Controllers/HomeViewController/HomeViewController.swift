@@ -14,11 +14,46 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
     private let sections = ["Featured", "Picked For You"]
     private var lastHeaderWidth: CGFloat = 0
 
+    private lazy var refreshControl: UIRefreshControl = {
+        let control = UIRefreshControl()
+        control.tintColor = AppTheme.brand
+        control.addTarget(self, action: #selector(refreshJobs), for: .valueChanged)
+        return control
+    }()
+
+    private lazy var emptyStateView: UIStackView = {
+        let iconView = UIImageView(image: UIImage(systemName: "briefcase.circle"))
+        iconView.tintColor = AppTheme.brand
+        iconView.contentMode = .scaleAspectFit
+        iconView.heightAnchor.constraint(equalToConstant: 56).isActive = true
+
+        let titleLabel = UILabel()
+        titleLabel.text = "Live vacancies are on the way"
+        titleLabel.font = UIFont.systemFont(ofSize: 20, weight: .bold)
+        titleLabel.textColor = .label
+        titleLabel.textAlignment = .center
+
+        let detailLabel = UILabel()
+        detailLabel.text = "Pull down to refresh after vacancies are published."
+        detailLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        detailLabel.textColor = AppTheme.secondaryText
+        detailLabel.textAlignment = .center
+        detailLabel.numberOfLines = 0
+
+        let stackView = UIStackView(arrangedSubviews: [iconView, titleLabel, detailLabel])
+        stackView.axis = .vertical
+        stackView.alignment = .fill
+        stackView.spacing = 10
+        stackView.isHidden = true
+        return stackView
+    }()
+
     private lazy var logoImageView: UIImageView = {
         let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "briefcase.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.contentMode = .scaleAspectFit
+        imageView.image = UIImage(named: "app_logo")
+        imageView.contentMode = .scaleAspectFill
+        imageView.layer.cornerRadius = 6
+        imageView.clipsToBounds = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
@@ -31,6 +66,7 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
         tableView.separatorStyle = .none
         tableView.backgroundColor = AppTheme.background
         tableView.showsVerticalScrollIndicator = false
+        tableView.refreshControl = refreshControl
         tableView.translatesAutoresizingMaskIntoConstraints = false
         return tableView
     }()
@@ -76,14 +112,14 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
 
     private func configureHeaderView() {
-        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 180)
+        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 210)
         jobTableView.tableHeaderView = advertHeaderView
         lastHeaderWidth = view.bounds.width
     }
 
     private func resizeHeaderIfNeeded() {
         guard view.bounds.width != lastHeaderWidth else { return }
-        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 180)
+        advertHeaderView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: 210)
         jobTableView.tableHeaderView = advertHeaderView
         lastHeaderWidth = view.bounds.width
     }
@@ -99,13 +135,20 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
             self.pickedForYouJobs = regular.isEmpty ? jobs : regular
 
             DispatchQueue.main.async {
+                self.refreshControl.endRefreshing()
+                self.emptyStateView.isHidden = !jobs.isEmpty
+                self.jobTableView.backgroundView = jobs.isEmpty ? self.emptyStateView : nil
                 self.jobTableView.reloadData()
             }
         }
     }
 
+    @objc private func refreshJobs() {
+        fetchJobs()
+    }
+
     func numberOfSections(in tableView: UITableView) -> Int {
-        return sections.count
+        return featuredJobs.isEmpty && pickedForYouJobs.isEmpty ? 0 : sections.count
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

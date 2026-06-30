@@ -54,9 +54,10 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
 
     private lazy var salaryLabel: UILabel = {
         let label = UILabel()
-        label.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        label.font = UIFont.systemFont(ofSize: 11, weight: .bold)
         label.textColor = AppTheme.brand
-        label.numberOfLines = 1
+        label.numberOfLines = 2
+        label.lineBreakMode = .byWordWrapping
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -104,6 +105,7 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
 
             salaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
             salaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
+            salaryLabel.topAnchor.constraint(greaterThanOrEqualTo: companyLabel.bottomAnchor, constant: 6),
             salaryLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10)
         ])
     }

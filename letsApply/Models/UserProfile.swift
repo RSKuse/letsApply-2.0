@@ -127,6 +127,7 @@ struct UserProfile: Codable {
     var phone: String
     var location: String
     var profilePictureUrl: String?
+    var profileImageData: Data?
     var cvUrl: String?
     var cvFileName: String?
     var professionalSummary: String
@@ -176,7 +177,7 @@ struct UserProfile: Codable {
         }
 
         if qualifications.isEmpty && qualificationEntries.isEmpty {
-            fields.append("Certificates or qualifications")
+            fields.append("Certificates acquired")
         }
 
         if experience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -199,6 +200,7 @@ struct UserProfile: Codable {
         case phone
         case location
         case profilePictureUrl
+        case profileImageData
         case cvUrl
         case cvFileName
         case professionalSummary
@@ -222,6 +224,7 @@ struct UserProfile: Codable {
         phone: String = "",
         location: String = "",
         profilePictureUrl: String? = nil,
+        profileImageData: Data? = nil,
         cvUrl: String? = nil,
         cvFileName: String? = nil,
         professionalSummary: String = "",
@@ -243,6 +246,7 @@ struct UserProfile: Codable {
         self.phone = phone
         self.location = location
         self.profilePictureUrl = profilePictureUrl
+        self.profileImageData = profileImageData
         self.cvUrl = cvUrl
         self.cvFileName = cvFileName
         self.professionalSummary = professionalSummary

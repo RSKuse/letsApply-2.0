@@ -18,7 +18,7 @@ enum CVSectionKind: CaseIterable {
         case .education:
             return "Education"
         case .qualifications:
-            return "Qualifications"
+            return "Certificates Acquired"
         case .references:
             return "References"
         }
@@ -42,7 +42,7 @@ enum CVSectionKind: CaseIterable {
         case .experience:
             return "Separate every role so recruiters can scan your career timeline."
         case .education:
-            return "Add each qualification with its institution and completion year."
+            return "Add each degree or education record with its institution and completion year."
         case .qualifications:
             return "Include certificates, licences, short courses, and professional registrations."
         case .references:
@@ -57,7 +57,7 @@ enum CVSectionKind: CaseIterable {
         case .education:
             return "No education entries yet."
         case .qualifications:
-            return "No qualifications entered yet."
+            return "No certificates entered yet."
         case .references:
             return "No references entered yet."
         }

@@ -43,6 +43,10 @@ class FirestoreService {
             data[UserProfile.CodingKeys.profilePictureUrl.rawValue] = profilePictureUrl
         }
 
+        if let profileImageData = profile.profileImageData {
+            data[UserProfile.CodingKeys.profileImageData.rawValue] = profileImageData
+        }
+
         if let cvUrl = profile.cvUrl {
             data[UserProfile.CodingKeys.cvUrl.rawValue] = cvUrl
         }
@@ -113,32 +117,81 @@ class FirestoreService {
     }
 
     func fetchJobs(numberOfJobsToFetch: Int? = nil, completion: @escaping ([Job]) -> Void) {
-        var query: Query = db.collection(FirebaseCollections.jobs.rawValue)
-
-        if let numberOfJobsToFetch = numberOfJobsToFetch {
-            query = query.limit(to: numberOfJobsToFetch)
-        }
-
-        query.getDocuments { snapshot, error in
+        db.collection(FirebaseCollections.jobs.rawValue).getDocuments { snapshot, error in
             if let error = error {
                 print("Error fetching jobs: \(error.localizedDescription)")
-                completion(Self.sampleJobs())
+                completion(self.candidateFallbackJobs())
                 return
             }
 
             guard let documents = snapshot?.documents, !documents.isEmpty else {
-                completion(Self.sampleJobs())
+                completion(self.candidateFallbackJobs())
                 return
             }
 
-            let jobs = documents.map { document in
-                self.mapJob(from: document.data(), documentID: document.documentID)
-            }
-            print("Documents found: \(documents.count)")
-            print("Loaded from Firestore")
+            var jobs = documents
+                .map {
+                    self.mapJob(from: $0.data(), documentID: $0.documentID)
+                }
+                .filter(\.isVisibleToCandidates)
+                .sorted { $0.postingDate > $1.postingDate }
 
-            completion(jobs.isEmpty ? Self.sampleJobs() : jobs)
+            if let numberOfJobsToFetch {
+                jobs = Array(jobs.prefix(numberOfJobsToFetch))
+            }
+
+            print("Documents found: \(documents.count)")
+            print("Published vacancies loaded: \(jobs.count)")
+
+            completion(jobs.isEmpty ? self.candidateFallbackJobs() : jobs)
         }
+    }
+
+    func fetchAdminJobs(completion: @escaping (Result<[Job], Error>) -> Void) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .getDocuments { snapshot, error in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+
+                let jobs = snapshot?.documents
+                    .map {
+                        self.mapJob(from: $0.data(), documentID: $0.documentID)
+                    }
+                    .sorted { $0.postingDate > $1.postingDate } ?? []
+                completion(.success(jobs))
+            }
+    }
+
+    func saveAdminJob(_ job: Job, completion: @escaping (Error?) -> Void) {
+        let collection = db.collection(FirebaseCollections.jobs.rawValue)
+        let document = job.id.map(collection.document) ?? collection.document()
+        var data = mapJobData(job)
+        data["updatedAt"] = FieldValue.serverTimestamp()
+
+        if job.id == nil {
+            data["createdAt"] = FieldValue.serverTimestamp()
+        }
+
+        document.setData(data, merge: false, completion: completion)
+    }
+
+    func updateJobPublicationStatus(
+        jobId: String,
+        status: JobPublicationStatus,
+        completion: @escaping (Error?) -> Void
+    ) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .document(jobId)
+            .setData(
+                [
+                    "publicationStatus": status.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ],
+                merge: true,
+                completion: completion
+            )
     }
 
     func fetchJob(jobId: String, completion: @escaping (Result<Job, Error>) -> Void) {
@@ -172,6 +225,7 @@ class FirestoreService {
             phone: data[UserProfile.CodingKeys.phone.rawValue] as? String ?? "",
             location: data[UserProfile.CodingKeys.location.rawValue] as? String ?? "South Africa",
             profilePictureUrl: data[UserProfile.CodingKeys.profilePictureUrl.rawValue] as? String ?? data["profile_picture_url"] as? String,
+            profileImageData: data[UserProfile.CodingKeys.profileImageData.rawValue] as? Data,
             cvUrl: data[UserProfile.CodingKeys.cvUrl.rawValue] as? String ?? data["cv_url"] as? String,
             cvFileName: data[UserProfile.CodingKeys.cvFileName.rawValue] as? String ?? data["cv_file_name"] as? String,
             professionalSummary: data[UserProfile.CodingKeys.professionalSummary.rawValue] as? String ?? data["professional_summary"] as? String ?? "",
@@ -335,7 +389,11 @@ class FirestoreService {
             salaryRange: SalaryRange(
                 min: salaryRangeData["min"] as? Int ?? data["minSalary"] as? Int ?? 0,
                 max: salaryRangeData["max"] as? Int ?? data["maxSalary"] as? Int ?? 0,
-                currency: salaryRangeData["currency"] as? String ?? data["currency"] as? String ?? "ZAR"
+                currency: salaryRangeData["currency"] as? String ?? data["currency"] as? String ?? "ZAR",
+                period: salaryRangeData["period"] as? String
+                    ?? salaryRangeData["payPeriod"] as? String
+                    ?? data["salaryPeriod"] as? String
+                    ?? data["payPeriod"] as? String
             ),
             benefits: compensationData["benefits"] as? [String] ?? data["benefits"] as? [String] ?? []
         )
@@ -344,7 +402,42 @@ class FirestoreService {
             deadline: applicationData["deadline"] as? String ?? data["applicationDeadline"] as? String ?? "Open until filled",
             applicationUrl: applicationData["applicationUrl"] as? String ?? data["applicationUrl"] as? String ?? "",
             applicationEmail: applicationData["applicationEmail"] as? String ?? data["applicationEmail"] as? String ?? "",
-            contactPhone: applicationData["contactPhone"] as? String ?? data["contactPhone"] as? String ?? ""
+            contactPhone: applicationData["contactPhone"] as? String ?? data["contactPhone"] as? String ?? "",
+            method: applicationData["method"] as? String ?? data["applicationMethod"] as? String ?? "",
+            formName: applicationData["formName"] as? String ?? data["applicationFormName"] as? String ?? "",
+            requiredForms: applicationData["requiredForms"] as? [String]
+                ?? data["requiredForms"] as? [String]
+                ?? [],
+            requiredDocuments: applicationData["requiredDocuments"] as? [String]
+                ?? data["requiredDocuments"] as? [String]
+                ?? [],
+            applicationInstructions: applicationData["instructions"] as? String
+                ?? data["applicationInstructions"] as? String
+                ?? "",
+            requiresCoverLetter: applicationData["requiresCoverLetter"] as? Bool
+                ?? data["requiresCoverLetter"] as? Bool
+                ?? true,
+            requiresCV: applicationData["requiresCV"] as? Bool
+                ?? data["requiresCV"] as? Bool
+                ?? true,
+            requiresZ83: applicationData["requiresZ83"] as? Bool
+                ?? data["requiresZ83"] as? Bool
+                ?? false,
+            requiresCertifiedDocuments: applicationData["requiresCertifiedDocuments"] as? Bool
+                ?? data["requiresCertifiedDocuments"] as? Bool
+                ?? false,
+            referenceNumber: applicationData["referenceNumber"] as? String
+                ?? data["referenceNumber"] as? String
+                ?? "",
+            postalAddress: applicationData["postalAddress"] as? String
+                ?? data["postalAddress"] as? String
+                ?? "",
+            handDeliveryAddress: applicationData["handDeliveryAddress"] as? String
+                ?? data["handDeliveryAddress"] as? String
+                ?? "",
+            requiresDriversLicense: applicationData["requiresDriversLicense"] as? Bool
+                ?? data["requiresDriversLicense"] as? Bool
+                ?? false
         )
 
         let visibility = Visibility(
@@ -370,8 +463,113 @@ class FirestoreService {
             jobCategory: data["jobCategory"] as? String ?? "General",
             postingDate: data["postingDate"] as? String ?? "",
             visibility: visibility,
-            promoted: data["promoted"] as? [String] ?? data["promotedTags"] as? [String]
+            promoted: data["promoted"] as? [String] ?? data["promotedTags"] as? [String],
+            sourceName: data["sourceName"] as? String ?? "Let’s Apply",
+            sourceUrl: data["sourceUrl"] as? String ?? "",
+            sourceJobId: data["sourceJobId"] as? String ?? data["externalId"] as? String ?? "",
+            sourceType: data["sourceType"] as? String ?? JobSourceType.manual.rawValue,
+            dateImported: data["dateImported"] as? String ?? "",
+            verified: data["verified"] as? Bool ?? false,
+            closingDate: dateString(
+                from: data["closingDate"]
+                    ?? applicationData["closingDate"]
+                    ?? applicationData["deadline"]
+            ),
+            publicationStatus: data["publicationStatus"] as? String
+                ?? data["status"] as? String
+                ?? JobPublicationStatus.published.rawValue
         )
+    }
+
+    private func mapJobData(_ job: Job) -> [String: Any] {
+        return [
+            "title": job.title,
+            "companyName": job.companyName,
+            "companyImageName": job.companyImageName ?? "",
+            "location": [
+                "city": job.location.city,
+                "region": job.location.region,
+                "country": job.location.country
+            ],
+            "jobType": job.jobType,
+            "remote": job.remote,
+            "description": job.description,
+            "qualifications": job.qualifications,
+            "responsibilities": job.responsibilities,
+            "requirements": job.requirements,
+            "experience": [
+                "minYears": job.experience.minYears,
+                "preferredYears": job.experience.preferredYears,
+                "details": job.experience.details
+            ],
+            "compensation": [
+                "salaryRange": [
+                    "min": job.compensation.salaryRange.min,
+                    "max": job.compensation.salaryRange.max,
+                    "currency": job.compensation.salaryRange.currency,
+                    "period": job.compensation.salaryRange.period ?? SalaryPayPeriod.annum.rawValue
+                ],
+                "benefits": job.compensation.benefits
+            ],
+            "application": [
+                "deadline": job.application.deadline,
+                "closingDate": job.closingDate,
+                "applicationUrl": job.application.applicationUrl,
+                "applicationEmail": job.application.applicationEmail,
+                "contactPhone": job.application.contactPhone,
+                "method": job.applicationMethod.rawValue,
+                "formName": job.application.formName,
+                "requiredForms": job.application.requiredForms,
+                "requiredDocuments": job.application.requiredDocuments,
+                "instructions": job.application.applicationInstructions,
+                "requiresCoverLetter": job.application.requiresCoverLetter,
+                "requiresCV": job.application.requiresCV,
+                "requiresZ83": job.application.requiresZ83,
+                "requiresCertifiedDocuments": job.application.requiresCertifiedDocuments,
+                "referenceNumber": job.application.referenceNumber,
+                "postalAddress": job.application.postalAddress,
+                "handDeliveryAddress": job.application.handDeliveryAddress,
+                "requiresDriversLicense": job.application.requiresDriversLicense
+            ],
+            "jobCategory": job.jobCategory,
+            "postingDate": job.postingDate,
+            "closingDate": job.closingDate,
+            "visibility": [
+                "featured": job.visibility.featured,
+                "promoted": job.visibility.promoted
+            ],
+            "promoted": job.promoted ?? [],
+            "sourceName": job.sourceName,
+            "sourceUrl": job.sourceUrl,
+            "sourceJobId": job.sourceJobId,
+            "sourceType": job.sourceType,
+            "dateImported": job.dateImported,
+            "verified": job.verified,
+            "publicationStatus": job.publicationStatus
+        ]
+    }
+
+    private func dateString(from value: Any?) -> String {
+        if let string = value as? String {
+            return string
+        }
+
+        guard let timestamp = value as? Timestamp else {
+            return ""
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: timestamp.dateValue())
+    }
+
+    private func candidateFallbackJobs() -> [Job] {
+        #if DEBUG
+        return Self.sampleJobs().filter(\.isVisibleToCandidates)
+        #else
+        return []
+        #endif
     }
 
     static func sampleJobs() -> [Job] {
@@ -390,7 +588,7 @@ class FirestoreService {
                 requirements: ["Swift", "UIKit", "MVVM"],
                 experience: Experience(minYears: 0, preferredYears: 1, details: "Portfolio projects accepted"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 18000, max: 30000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 18000, max: 30000, currency: "ZAR", period: "month"),
                     benefits: ["Remote", "Mentorship"]
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "careers@letsapply.co.za", contactPhone: ""),
@@ -413,7 +611,7 @@ class FirestoreService {
                 requirements: ["Research", "Excel", "Writing"],
                 experience: Experience(minYears: 1, preferredYears: 2, details: "Public sector experience preferred"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 22000, max: 35000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 22000, max: 35000, currency: "ZAR", period: "month"),
                     benefits: []
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "applications@example.org", contactPhone: ""),
@@ -436,7 +634,7 @@ class FirestoreService {
                 requirements: ["Administration", "Excel", "Communication"],
                 experience: Experience(minYears: 2, preferredYears: 3, details: "Higher education experience advantageous"),
                 compensation: Compensation(
-                    salaryRange: SalaryRange(min: 25000, max: 38000, currency: "ZAR"),
+                    salaryRange: SalaryRange(min: 25000, max: 38000, currency: "ZAR", period: "month"),
                     benefits: []
                 ),
                 application: JobApplicationInfo(deadline: "Open", applicationUrl: "", applicationEmail: "hr@example.ac.za", contactPhone: ""),
@@ -457,6 +655,9 @@ class FirestoreService {
         recruiterEmailSubject: String? = nil,
         recruiterEmailBody: String? = nil,
         matchScore: Int? = nil,
+        status: String = "submitted",
+        applicationMethod: String? = nil,
+        applicationDestination: String? = nil,
         completion: @escaping (Result<Application, Error>) -> Void
     ) {
         guard !userProfile.uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -487,14 +688,16 @@ class FirestoreService {
             jobTitle: job.title,
             companyName: job.companyName,
             appliedDate: Self.currentDateString(),
-            status: "submitted",
+            status: status,
             cvUrl: userProfile.cvUrl,
             coverLetterText: coverLetterText,
             isAIGenerated: isAIGenerated,
             tailoredCVText: tailoredCVText,
             recruiterEmailSubject: recruiterEmailSubject,
             recruiterEmailBody: recruiterEmailBody,
-            matchScore: matchScore
+            matchScore: matchScore,
+            applicationMethod: applicationMethod,
+            applicationDestination: applicationDestination
         )
 
         document.setData(mapApplicationData(application), merge: false) { error in
@@ -514,7 +717,19 @@ class FirestoreService {
         db.collection(FirebaseCollections.applications.rawValue)
             .document(applicationId)
             .getDocument { snapshot, _ in
-                completion(snapshot?.exists == true)
+                guard let data = snapshot?.data() else {
+                    completion(false)
+                    return
+                }
+
+                let status = (data["status"] as? String ?? "").lowercased()
+                let submittedStatuses = [
+                    "submitted",
+                    "sent",
+                    "applied-by-email",
+                    "applied-externally"
+                ]
+                completion(submittedStatuses.contains(status))
             }
     }
 
@@ -617,6 +832,71 @@ class FirestoreService {
             .replacingOccurrences(of: " ", with: "_")
     }
 
+    func deleteUserData(userId: String, completion: @escaping (Error?) -> Void) {
+        let collections = [
+            FirebaseCollections.applications.rawValue,
+            FirebaseCollections.savedJobs.rawValue
+        ]
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var documentReferences: [DocumentReference] = [
+            db.collection(FirebaseCollections.users.rawValue).document(userId)
+        ]
+        var firstError: Error?
+
+        for collection in collections {
+            group.enter()
+            db.collection(collection)
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments { snapshot, error in
+                    lock.lock()
+                    if firstError == nil {
+                        firstError = error
+                    }
+                    documentReferences.append(contentsOf: snapshot?.documents.map(\.reference) ?? [])
+                    lock.unlock()
+                    group.leave()
+                }
+        }
+
+        group.notify(queue: .main) {
+            if let firstError {
+                completion(firstError)
+                return
+            }
+
+            self.deleteDocuments(
+                Array(documentReferences),
+                completion: completion
+            )
+        }
+    }
+
+    private func deleteDocuments(
+        _ references: [DocumentReference],
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard !references.isEmpty else {
+            completion(nil)
+            return
+        }
+
+        let currentBatch = Array(references.prefix(400))
+        let remaining = Array(references.dropFirst(currentBatch.count))
+        let batch = db.batch()
+        currentBatch.forEach { reference in
+            batch.deleteDocument(reference)
+        }
+        batch.commit { error in
+            if let error {
+                completion(error)
+                return
+            }
+
+            self.deleteDocuments(remaining, completion: completion)
+        }
+    }
+
     private func mapApplicationData(_ application: Application) -> [String: Any] {
         var data: [String: Any] = [
             "id": application.id,
@@ -653,6 +933,14 @@ class FirestoreService {
             data["matchScore"] = matchScore
         }
 
+        if let applicationMethod = application.applicationMethod {
+            data["applicationMethod"] = applicationMethod
+        }
+
+        if let applicationDestination = application.applicationDestination {
+            data["applicationDestination"] = applicationDestination
+        }
+
         return data
     }
 
@@ -671,7 +959,9 @@ class FirestoreService {
             tailoredCVText: data["tailoredCVText"] as? String,
             recruiterEmailSubject: data["recruiterEmailSubject"] as? String,
             recruiterEmailBody: data["recruiterEmailBody"] as? String,
-            matchScore: data["matchScore"] as? Int
+            matchScore: data["matchScore"] as? Int,
+            applicationMethod: data["applicationMethod"] as? String,
+            applicationDestination: data["applicationDestination"] as? String
         )
     }
 

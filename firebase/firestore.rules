@@ -6,6 +6,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
     function ownsUserDocument(userId) {
       return signedIn() && request.auth.uid == userId;
     }
@@ -22,12 +28,27 @@ service cloud.firestore {
       return signedIn() && documentId.matches(request.auth.uid + '_.*');
     }
 
+    function validProfileImage() {
+      return !('profileImageData' in request.resource.data)
+        || (
+          request.resource.data.profileImageData is bytes
+          && request.resource.data.profileImageData.size() <= 180000
+        );
+    }
+
     match /users/{userId} {
-      allow read, write: if ownsUserDocument(userId);
+      allow read, delete: if ownsUserDocument(userId);
+      allow create, update: if ownsUserDocument(userId) && validProfileImage();
+    }
+
+    match /admins/{userId} {
+      allow read: if ownsUserDocument(userId);
+      allow write: if false;
     }
 
     match /jobs/{document=**} {
       allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /applications/{applicationId} {
