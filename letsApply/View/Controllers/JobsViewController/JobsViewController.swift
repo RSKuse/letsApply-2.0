@@ -203,7 +203,6 @@ class JobsViewController: UIViewController {
         button.accessibilityIdentifier = filter.rawValue
         button.titleLabel?.adjustsFontSizeToFitWidth = true
         button.titleLabel?.minimumScaleFactor = 0.8
-        button.heightAnchor.constraint(equalToConstant: 36).isActive = true
         button.addTarget(self, action: #selector(filterTapped(_:)), for: .touchUpInside)
         filterButtons[filter] = button
         return button

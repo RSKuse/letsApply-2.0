@@ -148,8 +148,7 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
             advertCollectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
             advertCollectionView.bottomAnchor.constraint(equalTo: pageControl.topAnchor, constant: -4),
 
-            pageControl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            pageControl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            pageControl.centerXAnchor.constraint(equalTo: centerXAnchor),
             pageControl.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
             pageControl.heightAnchor.constraint(equalToConstant: 20)
         ])
