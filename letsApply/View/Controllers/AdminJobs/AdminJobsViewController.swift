@@ -260,6 +260,42 @@ class AdminJobsViewController: UIViewController {
         }
     }
 
+    private func confirmPermanentDeletion(of job: Job) {
+        guard let jobId = job.id else { return }
+
+        let alert = UIAlertController(
+            title: "Delete Expired Vacancy?",
+            message: "\"\(job.title)\" will be permanently removed. This cannot be undone.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Delete Permanently", style: .destructive) { [weak self] _ in
+            self?.deleteExpiredJob(jobId: jobId)
+        })
+        present(alert, animated: true)
+    }
+
+    private func deleteExpiredJob(jobId: String) {
+        if isDebugMode {
+            jobs.removeAll { $0.id == jobId }
+            finishLoading()
+            return
+        }
+
+        firestoreService.deleteAdminJob(jobId: jobId) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error {
+                    self?.showAlert(
+                        title: "Vacancy Not Deleted",
+                        message: error.localizedDescription
+                    )
+                } else {
+                    self?.fetchJobs()
+                }
+            }
+        }
+    }
+
     @objc private func refreshJobs() {
         fetchJobs()
     }
@@ -307,6 +343,19 @@ extension AdminJobsViewController: UITableViewDataSource, UITableViewDelegate {
         trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
     ) -> UISwipeActionsConfiguration? {
         let job = filteredJobs[indexPath.row]
+
+        if job.resolvedPublicationStatus == .expired {
+            let deleteAction = UIContextualAction(
+                style: .destructive,
+                title: "Delete"
+            ) { [weak self] _, _, completion in
+                self?.confirmPermanentDeletion(of: job)
+                completion(true)
+            }
+            deleteAction.image = UIImage(systemName: "trash.fill")
+            return UISwipeActionsConfiguration(actions: [deleteAction])
+        }
+
         guard job.resolvedPublicationStatus == .published else { return nil }
 
         let pauseAction = UIContextualAction(

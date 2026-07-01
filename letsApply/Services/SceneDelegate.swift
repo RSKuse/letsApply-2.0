@@ -31,6 +31,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if debugScreen == "home" {
             return UINavigationController(rootViewController: HomeViewController())
         }
+        if debugScreen == "jobs" {
+            return MainTabBarController(initialSelectedIndex: 1)
+        }
         if debugScreen == "admin-jobs" {
             return UINavigationController(
                 rootViewController: AdminJobsViewController(isDebugMode: true)

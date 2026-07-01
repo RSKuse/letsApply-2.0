@@ -194,6 +194,15 @@ class FirestoreService {
             )
     }
 
+    func deleteAdminJob(
+        jobId: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        db.collection(FirebaseCollections.jobs.rawValue)
+            .document(jobId)
+            .delete(completion: completion)
+    }
+
     func fetchJob(jobId: String, completion: @escaping (Result<Job, Error>) -> Void) {
         db.collection(FirebaseCollections.jobs.rawValue)
             .document(jobId)
@@ -646,6 +655,46 @@ class FirestoreService {
                 postingDate: "2026-06-07",
                 visibility: Visibility(featured: false, promoted: false),
                 promoted: nil
+            ),
+            Job(
+                id: "sample-government",
+                title: "Monitoring and Evaluation Specialist",
+                companyName: "Department of Public Service and Administration",
+                companyImageName: nil,
+                location: Location(city: "Pretoria", region: "Gauteng", country: "South Africa"),
+                jobType: "Permanent",
+                remote: false,
+                description: "Support public-service monitoring, evaluation, reporting, and evidence-based decision-making.",
+                qualifications: ["Relevant degree", "Monitoring and Evaluation"],
+                responsibilities: ["Analyse programme evidence", "Prepare executive reports"],
+                requirements: ["Public service knowledge", "Report writing"],
+                experience: Experience(minYears: 3, preferredYears: 5, details: "Government experience advantageous"),
+                compensation: Compensation(
+                    salaryRange: SalaryRange(min: 657_477, max: 989_678, currency: "ZAR", period: "annum"),
+                    benefits: ["Government employee benefits"]
+                ),
+                application: JobApplicationInfo(
+                    deadline: "31 July 2026",
+                    applicationUrl: "https://www.dpsa.gov.za/newsroom/psvc/",
+                    applicationEmail: "",
+                    contactPhone: "",
+                    method: "governmentWebsite",
+                    formName: "Z83 Application for Employment",
+                    requiredForms: ["Z83 form"],
+                    requiredDocuments: ["CV", "Certified qualifications"],
+                    requiresCoverLetter: false,
+                    requiresCV: true,
+                    requiresZ83: true,
+                    requiresCertifiedDocuments: true
+                ),
+                jobCategory: "Public Service",
+                postingDate: "2026-07-01",
+                visibility: Visibility(featured: false, promoted: false),
+                promoted: nil,
+                sourceName: "DPSA Public Service Vacancy Circular",
+                sourceUrl: "https://www.dpsa.gov.za/newsroom/psvc/",
+                sourceType: JobSourceType.government.rawValue,
+                verified: true
             )
         ]
     }

@@ -30,8 +30,8 @@ class JobCollectionViewCell: UICollectionViewCell {
         label.font = UIFont.systemFont(ofSize: 11, weight: .bold)
         label.textColor = AppTheme.brand
         label.textAlignment = .right
-        label.numberOfLines = 2
-        label.lineBreakMode = .byWordWrapping
+        label.numberOfLines = 1
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -58,7 +58,7 @@ class JobCollectionViewCell: UICollectionViewCell {
         let label = UILabel()
         label.font = UIFont.systemFont(ofSize: 12, weight: .medium)
         label.textColor = .secondaryLabel
-        label.numberOfLines = 2
+        label.numberOfLines = 1
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -68,8 +68,26 @@ class JobCollectionViewCell: UICollectionViewCell {
         label.font = UIFont.systemFont(ofSize: 13, weight: .bold)
         label.textColor = .label
         label.numberOfLines = 1
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
+    }()
+
+    private lazy var headerTextStackView: UIStackView = {
+        let stackView = UIStackView(arrangedSubviews: [jobTitleLabel, companyLabel])
+        stackView.axis = .vertical
+        stackView.spacing = 4
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        return stackView
+    }()
+
+    private lazy var footerStackView: UIStackView = {
+        let stackView = UIStackView(arrangedSubviews: [salaryLabel, jobTypeLabel])
+        stackView.axis = .horizontal
+        stackView.alignment = .center
+        stackView.spacing = 10
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        return stackView
     }()
 
     override init(frame: CGRect) {
@@ -90,11 +108,9 @@ class JobCollectionViewCell: UICollectionViewCell {
     private func setupUI() {
         contentView.addSubview(cardView)
         cardView.addSubview(companyIconView)
-        cardView.addSubview(jobTypeLabel)
-        cardView.addSubview(jobTitleLabel)
-        cardView.addSubview(companyLabel)
+        cardView.addSubview(headerTextStackView)
         cardView.addSubview(locationLabel)
-        cardView.addSubview(salaryLabel)
+        cardView.addSubview(footerStackView)
 
         NSLayoutConstraint.activate([
             cardView.topAnchor.constraint(equalTo: contentView.topAnchor),
@@ -104,29 +120,22 @@ class JobCollectionViewCell: UICollectionViewCell {
 
             companyIconView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 14),
             companyIconView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
-            companyIconView.widthAnchor.constraint(equalToConstant: 46),
-            companyIconView.heightAnchor.constraint(equalToConstant: 46),
+            companyIconView.widthAnchor.constraint(equalToConstant: 48),
+            companyIconView.heightAnchor.constraint(equalToConstant: 48),
 
-            jobTypeLabel.centerYAnchor.constraint(equalTo: companyIconView.centerYAnchor),
-            jobTypeLabel.leadingAnchor.constraint(equalTo: companyIconView.trailingAnchor, constant: 8),
-            jobTypeLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
+            headerTextStackView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 14),
+            headerTextStackView.leadingAnchor.constraint(equalTo: companyIconView.trailingAnchor, constant: 12),
+            headerTextStackView.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
 
-            jobTitleLabel.topAnchor.constraint(equalTo: companyIconView.bottomAnchor, constant: 16),
-            jobTitleLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
-            jobTitleLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
+            locationLabel.topAnchor.constraint(equalTo: headerTextStackView.bottomAnchor, constant: 10),
+            locationLabel.topAnchor.constraint(greaterThanOrEqualTo: companyIconView.bottomAnchor, constant: 10),
+            locationLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
+            locationLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
 
-            companyLabel.topAnchor.constraint(equalTo: jobTitleLabel.bottomAnchor, constant: 8),
-            companyLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
-            companyLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
-
-            locationLabel.topAnchor.constraint(equalTo: companyLabel.bottomAnchor, constant: 8),
-            locationLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
-            locationLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
-
-            salaryLabel.leadingAnchor.constraint(equalTo: jobTitleLabel.leadingAnchor),
-            salaryLabel.trailingAnchor.constraint(equalTo: jobTitleLabel.trailingAnchor),
-            salaryLabel.topAnchor.constraint(greaterThanOrEqualTo: locationLabel.bottomAnchor, constant: 8),
-            salaryLabel.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14)
+            footerStackView.leadingAnchor.constraint(equalTo: locationLabel.leadingAnchor),
+            footerStackView.trailingAnchor.constraint(equalTo: locationLabel.trailingAnchor),
+            footerStackView.topAnchor.constraint(greaterThanOrEqualTo: locationLabel.bottomAnchor, constant: 12),
+            footerStackView.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14)
         ])
     }
 

@@ -37,6 +37,13 @@ final class CompanyLogoView: UIView {
         reset()
         accessibilityLabel = "\(job.companyName) logo"
 
+        if job.requiresGovernmentFlow,
+           let governmentImage = UIImage(named: "south_africa_coat_of_arms") {
+            accessibilityLabel = "South African government coat of arms"
+            showLogo(governmentImage)
+            return
+        }
+
         if let imageName = job.companyImageName,
            !imageName.isEmpty,
            let image = UIImage(named: imageName) {
@@ -103,10 +110,10 @@ final class CompanyLogoView: UIView {
 
         addSubview(imageView)
         NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -7)
         ])
     }
 

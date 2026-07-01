@@ -5,13 +5,25 @@
 
 import UIKit
 
+private enum JobQuickFilter: String, CaseIterable {
+    case all = "All"
+    case remote = "Remote"
+    case hybrid = "Hybrid"
+    case featured = "Featured"
+    case government = "Government"
+    case permanent = "Permanent"
+    case contract = "Contract"
+}
+
 class JobsViewController: UIViewController {
 
     private let viewModel = JobViewModel()
     private var jobs: [Job] = []
     private var filteredJobs: [Job] = []
-    private var activeFilters = JobFilters()
-    private var selectedFilterTitle = "All"
+    private var selectedQuickFilter: JobQuickFilter = .all
+    private var selectedDepartment = ""
+    private var searchText = ""
+    private var filterButtons: [JobQuickFilter: UIButton] = [:]
 
     private lazy var searchController: UISearchController = {
         let controller = UISearchController(searchResultsController: nil)
@@ -38,20 +50,49 @@ class JobsViewController: UIViewController {
         return collectionView
     }()
 
-    private lazy var filterScrollView: UIScrollView = {
-        let scrollView = UIScrollView()
-        scrollView.showsHorizontalScrollIndicator = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        return scrollView
+    private lazy var filterPanelView: UIView = {
+        let view = UIView()
+        view.backgroundColor = AppTheme.surface
+        view.layer.cornerRadius = AppTheme.cardRadius
+        view.layer.borderWidth = 1
+        view.layer.borderColor = AppTheme.border.cgColor
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
-    private lazy var filterStackView: UIStackView = {
+    private lazy var filterGridStackView: UIStackView = {
         let stackView = UIStackView()
-        stackView.axis = .horizontal
-        stackView.alignment = .center
-        stackView.spacing = 10
+        stackView.axis = .vertical
+        stackView.spacing = 8
         stackView.translatesAutoresizingMaskIntoConstraints = false
         return stackView
+    }()
+
+    private lazy var departmentButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.accessibilityLabel = "Filter by government department"
+        button.accessibilityHint = "Opens a list of departments"
+        button.showsMenuAsPrimaryAction = true
+        button.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        return button
+    }()
+
+    private lazy var resultsLabel: UILabel = {
+        let label = UILabel()
+        label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = AppTheme.secondaryText
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var clearFiltersButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("Clear", for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        button.tintColor = AppTheme.brand
+        button.addTarget(self, action: #selector(clearFiltersTapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
     }()
 
     private lazy var emptyStateLabel: UILabel = {
@@ -81,24 +122,32 @@ class JobsViewController: UIViewController {
     }
 
     private func setupUI() {
-        view.addSubview(filterScrollView)
-        filterScrollView.addSubview(filterStackView)
+        buildFilterGrid()
+        view.addSubview(filterPanelView)
+        filterPanelView.addSubview(filterGridStackView)
+        filterPanelView.addSubview(resultsLabel)
+        filterPanelView.addSubview(clearFiltersButton)
         view.addSubview(jobsCollectionView)
         view.addSubview(emptyStateLabel)
 
         NSLayoutConstraint.activate([
-            filterScrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            filterScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            filterScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            filterScrollView.heightAnchor.constraint(equalToConstant: 46),
+            filterPanelView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            filterPanelView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            filterPanelView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
 
-            filterStackView.topAnchor.constraint(equalTo: filterScrollView.topAnchor, constant: 4),
-            filterStackView.leadingAnchor.constraint(equalTo: filterScrollView.leadingAnchor, constant: 20),
-            filterStackView.trailingAnchor.constraint(equalTo: filterScrollView.trailingAnchor, constant: -20),
-            filterStackView.bottomAnchor.constraint(equalTo: filterScrollView.bottomAnchor, constant: -4),
-            filterStackView.heightAnchor.constraint(equalToConstant: 38),
+            filterGridStackView.topAnchor.constraint(equalTo: filterPanelView.topAnchor, constant: 12),
+            filterGridStackView.leadingAnchor.constraint(equalTo: filterPanelView.leadingAnchor, constant: 12),
+            filterGridStackView.trailingAnchor.constraint(equalTo: filterPanelView.trailingAnchor, constant: -12),
 
-            jobsCollectionView.topAnchor.constraint(equalTo: filterScrollView.bottomAnchor),
+            resultsLabel.topAnchor.constraint(equalTo: filterGridStackView.bottomAnchor, constant: 10),
+            resultsLabel.leadingAnchor.constraint(equalTo: filterGridStackView.leadingAnchor),
+            resultsLabel.bottomAnchor.constraint(equalTo: filterPanelView.bottomAnchor, constant: -10),
+
+            clearFiltersButton.centerYAnchor.constraint(equalTo: resultsLabel.centerYAnchor),
+            clearFiltersButton.trailingAnchor.constraint(equalTo: filterGridStackView.trailingAnchor),
+            clearFiltersButton.leadingAnchor.constraint(greaterThanOrEqualTo: resultsLabel.trailingAnchor, constant: 12),
+
+            jobsCollectionView.topAnchor.constraint(equalTo: filterPanelView.bottomAnchor, constant: 4),
             jobsCollectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             jobsCollectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             jobsCollectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -114,80 +163,190 @@ class JobsViewController: UIViewController {
         viewModel.fetchJobs { [weak self] fetchedJobs in
             DispatchQueue.main.async {
                 self?.jobs = fetchedJobs
-                self?.buildFilterChips()
+                self?.rebuildDepartmentMenu()
                 self?.applyFilters()
             }
         }
     }
 
-    private func buildFilterChips() {
-        filterStackView.arrangedSubviews.forEach { view in
-            filterStackView.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-
-        let jobTypes = Array(Set(jobs.map { $0.jobType }.filter { !$0.isEmpty })).sorted()
-        let categories = Array(Set(jobs.map { $0.jobCategory }.filter { !$0.isEmpty })).sorted()
-        let titles = ["All", "Remote", "Featured"] + jobTypes + categories
-
-        titles.prefix(14).forEach { title in
-            filterStackView.addArrangedSubview(makeFilterButton(title: title))
-        }
+    private func buildFilterGrid() {
+        let firstRow = makeFilterRow(for: [.all, .remote, .hybrid, .featured])
+        let secondRow = makeFilterRow(
+            for: [.government, .permanent, .contract],
+            additionalView: departmentButton
+        )
+        filterGridStackView.addArrangedSubview(firstRow)
+        filterGridStackView.addArrangedSubview(secondRow)
+        styleAllFilterButtons()
+        rebuildDepartmentMenu()
     }
 
-    private func makeFilterButton(title: String) -> UIButton {
+    private func makeFilterRow(
+        for filters: [JobQuickFilter],
+        additionalView: UIView? = nil
+    ) -> UIStackView {
+        var views: [UIView] = filters.map { makeFilterButton(filter: $0) }
+        if let additionalView {
+            views.append(additionalView)
+        }
+        let row = UIStackView(arrangedSubviews: views)
+        row.axis = .horizontal
+        row.distribution = .fillEqually
+        row.spacing = 8
+        row.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        return row
+    }
+
+    private func makeFilterButton(filter: JobQuickFilter) -> UIButton {
         let button = UIButton(type: .system)
-        button.accessibilityLabel = title
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        button.accessibilityLabel = "\(filter.rawValue) jobs"
+        button.accessibilityIdentifier = filter.rawValue
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.8
         button.heightAnchor.constraint(equalToConstant: 36).isActive = true
         button.addTarget(self, action: #selector(filterTapped(_:)), for: .touchUpInside)
-        styleFilterButton(button, selected: title == selectedFilterTitle)
+        filterButtons[filter] = button
         return button
     }
 
-    private func styleFilterButton(_ button: UIButton, selected: Bool) {
+    private func styleFilterButton(
+        _ button: UIButton,
+        title: String,
+        selected: Bool
+    ) {
         var configuration = UIButton.Configuration.filled()
-        configuration.title = button.accessibilityLabel
+        configuration.title = title
         configuration.baseBackgroundColor = selected ? AppTheme.brand : AppTheme.mutedSurface
         configuration.baseForegroundColor = selected ? .white : .label
-        configuration.cornerStyle = .capsule
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14)
+        configuration.cornerStyle = .medium
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 6, bottom: 7, trailing: 6)
+        configuration.background.strokeColor = selected ? .clear : AppTheme.border
+        configuration.background.strokeWidth = selected ? 0 : 1
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var updatedAttributes = attributes
+            updatedAttributes.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+            return updatedAttributes
+        }
         button.configuration = configuration
     }
 
-    @objc private func filterTapped(_ sender: UIButton) {
-        selectedFilterTitle = sender.accessibilityLabel ?? "All"
-        activeFilters = JobFilters(keyword: activeFilters.keyword)
+    private func styleAllFilterButtons() {
+        filterButtons.forEach { filter, button in
+            styleFilterButton(
+                button,
+                title: filter.rawValue,
+                selected: filter == selectedQuickFilter
+            )
+        }
+        styleFilterButton(
+            departmentButton,
+            title: selectedDepartment.isEmpty ? "Dept." : "Dept. ✓",
+            selected: !selectedDepartment.isEmpty
+        )
+        var departmentConfiguration = departmentButton.configuration
+        departmentConfiguration?.image = UIImage(systemName: "chevron.down")
+        departmentConfiguration?.imagePlacement = .trailing
+        departmentConfiguration?.imagePadding = 4
+        departmentButton.configuration = departmentConfiguration
+    }
 
-        switch selectedFilterTitle {
-        case "Remote":
-            activeFilters.remoteOnly = true
-        case "Featured":
-            activeFilters.featuredOnly = true
-        case "All":
-            break
-        default:
-            if jobs.contains(where: { $0.jobType == selectedFilterTitle }) {
-                activeFilters.jobType = selectedFilterTitle
-            } else {
-                activeFilters.category = selectedFilterTitle
+    private func rebuildDepartmentMenu() {
+        let departments = Array(Set(
+            jobs
+                .filter(\.requiresGovernmentFlow)
+                .map(\.companyName)
+                .filter { !$0.isEmpty }
+        )).sorted()
+
+        if !selectedDepartment.isEmpty && !departments.contains(selectedDepartment) {
+            selectedDepartment = ""
+        }
+
+        let allAction = UIAction(
+            title: "All Departments",
+            state: selectedDepartment.isEmpty ? .on : .off
+        ) { [weak self] _ in
+            self?.selectDepartment("")
+        }
+        let departmentActions = departments.map { department in
+            UIAction(
+                title: department,
+                state: department == selectedDepartment ? .on : .off
+            ) { [weak self] _ in
+                self?.selectDepartment(department)
             }
         }
 
-        filterStackView.arrangedSubviews.compactMap { $0 as? UIButton }.forEach {
-            styleFilterButton($0, selected: $0.accessibilityLabel == selectedFilterTitle)
+        departmentButton.menu = UIMenu(
+            title: "Government Departments",
+            children: [allAction] + departmentActions
+        )
+        departmentButton.isEnabled = !departments.isEmpty
+        styleAllFilterButtons()
+    }
+
+    private func selectDepartment(_ department: String) {
+        selectedDepartment = department
+        if !department.isEmpty {
+            selectedQuickFilter = .government
         }
+        rebuildDepartmentMenu()
+        applyFilters()
+    }
+
+    @objc private func filterTapped(_ sender: UIButton) {
+        guard let identifier = sender.accessibilityIdentifier,
+              let filter = JobQuickFilter(rawValue: identifier) else {
+            return
+        }
+
+        selectedQuickFilter = filter
+        if filter != .government {
+            selectedDepartment = ""
+            rebuildDepartmentMenu()
+        }
+        styleAllFilterButtons()
         applyFilters()
     }
 
     private func updateEmptyState() {
         emptyStateLabel.isHidden = !filteredJobs.isEmpty
+        emptyStateLabel.text = "No jobs match these filters."
     }
 
     private func applyFilters() {
-        filteredJobs = jobs.filter { activeFilters.matches($0) }
+        filteredJobs = jobs.filter { job in
+            matchesSearch(job)
+                && selectedQuickFilter.matches(job)
+                && matchesDepartment(job)
+        }
+
+        let noun = filteredJobs.count == 1 ? "opportunity" : "opportunities"
+        resultsLabel.text = "\(filteredJobs.count) \(noun)"
+        clearFiltersButton.isHidden = selectedQuickFilter == .all
+            && selectedDepartment.isEmpty
+            && searchText.isEmpty
         updateEmptyState()
         jobsCollectionView.reloadData()
+    }
+
+    private func matchesSearch(_ job: Job) -> Bool {
+        guard !searchText.isEmpty else { return true }
+        return JobFilters(keyword: searchText).matches(job)
+    }
+
+    private func matchesDepartment(_ job: Job) -> Bool {
+        selectedDepartment.isEmpty || job.companyName == selectedDepartment
+    }
+
+    @objc private func clearFiltersTapped() {
+        selectedQuickFilter = .all
+        selectedDepartment = ""
+        searchText = ""
+        searchController.searchBar.text = ""
+        rebuildDepartmentMenu()
+        styleAllFilterButtons()
+        applyFilters()
     }
 
     private func openJobDetails(_ job: Job) {
@@ -219,17 +378,48 @@ extension JobsViewController: UICollectionViewDelegate, UICollectionViewDataSour
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
         let availableWidth = collectionView.bounds.width - collectionView.contentInset.left - collectionView.contentInset.right
-        let columns: CGFloat = availableWidth > 500 ? 3 : 2
+        let columns: CGFloat = availableWidth > 700 ? 2 : 1
         let totalSpacing = (columns - 1) * 12
         let width = floor((availableWidth - totalSpacing) / columns)
-        return CGSize(width: width, height: 220)
+        return CGSize(width: width, height: columns == 1 ? 172 : 210)
     }
 }
 
 extension JobsViewController: UISearchResultsUpdating {
 
     func updateSearchResults(for searchController: UISearchController) {
-        activeFilters.keyword = searchController.searchBar.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        searchText = searchController.searchBar.text?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         applyFilters()
+    }
+}
+
+private extension JobQuickFilter {
+
+    func matches(_ job: Job) -> Bool {
+        let workStyleText = [
+            job.jobType,
+            job.locationText,
+            job.description
+        ].joined(separator: " ")
+
+        switch self {
+        case .all:
+            return true
+        case .remote:
+            return job.remote || workStyleText.localizedCaseInsensitiveContains("remote")
+        case .hybrid:
+            return workStyleText.localizedCaseInsensitiveContains("hybrid")
+        case .featured:
+            return job.isFeatured
+        case .government:
+            return job.requiresGovernmentFlow
+        case .permanent:
+            return job.jobType.localizedCaseInsensitiveContains("permanent")
+        case .contract:
+            return job.jobType.localizedCaseInsensitiveContains("contract")
+                || job.jobType.localizedCaseInsensitiveContains("fixed term")
+                || job.jobType.localizedCaseInsensitiveContains("temporary")
+        }
     }
 }
