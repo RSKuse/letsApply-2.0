@@ -19,4 +19,12 @@ extension UITextField {
         self.returnKeyType = .done
         self.translatesAutoresizingMaskIntoConstraints = false
     }
+
+    func setLeftPaddingPoints(_ amount: CGFloat) {
+        let paddingView = UIView(
+            frame: CGRect(x: 0, y: 0, width: amount, height: 1)
+        )
+        leftView = paddingView
+        leftViewMode = .always
+    }
 }

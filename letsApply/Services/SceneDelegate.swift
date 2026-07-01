@@ -34,6 +34,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if debugScreen == "jobs" {
             return MainTabBarController(initialSelectedIndex: 1)
         }
+        if debugScreen == "job-details" {
+            return UINavigationController(
+                rootViewController: JobDetailsViewController(
+                    job: Self.debugGovernmentJob(),
+                    isPreviewMode: true
+                )
+            )
+        }
         if debugScreen == "admin-jobs" {
             return UINavigationController(
                 rootViewController: AdminJobsViewController(isDebugMode: true)
@@ -42,6 +50,26 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if debugScreen == "admin-editor" {
             return UINavigationController(
                 rootViewController: AdminJobEditorViewController(isDebugMode: true)
+            )
+        }
+        if debugScreen == "admin-import" {
+            return UINavigationController(
+                rootViewController: AdminSourceImportViewController(isDebugMode: true)
+            )
+        }
+        if debugScreen == "z83" {
+            let profile = Self.debugGovernmentProfile()
+            let job = FirestoreService.sampleJobs().first(where: \.requiresGovernmentFlow)
+                ?? Self.debugGovernmentJob()
+            try? Z83ProfileStore().save(
+                Self.debugCompletedZ83Profile(name: profile.name),
+                userId: profile.uid
+            )
+            return UINavigationController(
+                rootViewController: Z83EditorViewController(
+                    job: job,
+                    userProfile: profile
+                )
             )
         }
         if debugScreen == "profile" {
@@ -173,6 +201,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 dateImported: "2026-06-28",
                 verified: true
             )
+            if ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_Z83"] == "1" {
+                try? Z83ProfileStore().save(
+                    Self.debugCompletedZ83Profile(name: profile.name),
+                    userId: profile.uid
+                )
+            }
             return UINavigationController(
                 rootViewController: AutoApplyAssistantViewController(
                     job: job,
@@ -183,5 +217,135 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         #endif
 
         return SplashViewController()
+    }
+}
+
+private extension SceneDelegate {
+
+    static func debugGovernmentProfile() -> UserProfile {
+        UserProfile(
+            uid: "debug-user",
+            name: "Reuben Kuse",
+            email: "reuben@example.com",
+            phone: "066 000 0000",
+            location: "Durban, South Africa",
+            professionalSummary: "Research and evaluation specialist.",
+            jobTitle: "Research Specialist",
+            skills: ["Research", "Policy analysis", "Report writing"],
+            qualifications: ["AWS Cloud Practitioner"],
+            workExperiences: [
+                CVWorkExperience(
+                    jobTitle: "Assessment Lead",
+                    company: "Regent Business School",
+                    location: "Durban",
+                    startDate: "01/2023",
+                    endDate: "Present",
+                    responsibilities: ["Led assessment governance and reporting."]
+                )
+            ],
+            educationEntries: [
+                CVEducationEntry(
+                    qualification: "Master of Management",
+                    institution: "University of the Witwatersrand",
+                    fieldOfStudy: "Monitoring and Evaluation",
+                    endYear: "2022"
+                )
+            ],
+            references: [
+                CVReference(
+                    name: "Example Referee",
+                    jobTitle: "Academic Manager",
+                    company: "Example Institution",
+                    relationship: "Former manager",
+                    email: "referee@example.com",
+                    phone: "011 000 0000"
+                )
+            ]
+        )
+    }
+
+    static func debugGovernmentJob() -> Job {
+        Job(
+            id: "debug-z83-job",
+            title: "Senior Researcher",
+            companyName: "Department of Public Service",
+            companyImageName: nil,
+            location: Location(city: "Pretoria", region: "Gauteng", country: "South Africa"),
+            jobType: "Permanent",
+            remote: false,
+            description: "Government research vacancy requiring a Z83.",
+            qualifications: ["Relevant postgraduate qualification"],
+            responsibilities: ["Conduct research and prepare reports"],
+            requirements: ["Research", "Report writing"],
+            experience: Experience(minYears: 3, preferredYears: 5, details: ""),
+            compensation: Compensation(
+                salaryRange: SalaryRange(
+                    min: 657_477,
+                    max: 989_678,
+                    currency: "ZAR",
+                    period: "annum"
+                ),
+                benefits: []
+            ),
+            application: JobApplicationInfo(
+                deadline: "31 July 2026",
+                applicationUrl: "",
+                applicationEmail: "applications@example.gov.za",
+                contactPhone: "",
+                method: "governmentEmail",
+                formName: "Z83 Application for Employment",
+                requiredForms: ["Z83 form"],
+                requiredDocuments: ["CV"],
+                applicationInstructions: "Email the completed and signed Z83 form and detailed CV to applications@example.gov.za. Quote REF/2026/001 in the subject line.",
+                requiresCoverLetter: true,
+                requiresCV: true,
+                requiresZ83: true,
+                referenceNumber: "REF/2026/001"
+            ),
+            jobCategory: "Public Service",
+            postingDate: "2026-07-01",
+            visibility: Visibility(featured: true, promoted: false),
+            promoted: nil,
+            sourceName: "DPSA",
+            sourceUrl: "https://www.dpsa.gov.za/newsroom/psvc/",
+            sourceType: JobSourceType.government.rawValue,
+            verified: true
+        )
+    }
+
+    static func debugCompletedZ83Profile(name: String) -> Z83ApplicationProfile {
+        let stroke = SignatureStroke(points: [
+            SignaturePoint(CGPoint(x: 0.08, y: 0.70)),
+            SignaturePoint(CGPoint(x: 0.25, y: 0.30)),
+            SignaturePoint(CGPoint(x: 0.42, y: 0.68)),
+            SignaturePoint(CGPoint(x: 0.62, y: 0.28)),
+            SignaturePoint(CGPoint(x: 0.88, y: 0.62))
+        ])
+        return Z83ApplicationProfile(
+            fullName: name,
+            dateOfBirth: "01/01/1990",
+            identityNumber: "9001015009087",
+            race: "African",
+            gender: "Male",
+            hasDisability: .no,
+            isSouthAfricanCitizen: .yes,
+            hasValidWorkPermit: .no,
+            hasCriminalConviction: .no,
+            hasPendingCriminalCase: .no,
+            dismissedForPublicServiceMisconduct: .no,
+            hasPendingDisciplinaryCase: .no,
+            resignedPendingDisciplinaryProceedings: .no,
+            dischargedForIllHealth: .no,
+            conductsBusinessWithState: .no,
+            willRelinquishBusinessInterests: .yes,
+            privateSectorYears: "5",
+            publicSectorYears: "0",
+            preferredLanguage: "English",
+            communicationMethod: "Email",
+            availability: "One month notice",
+            previousPublicServiceRestriction: .no,
+            signatureStrokes: [stroke],
+            declarationAccepted: true
+        )
     }
 }

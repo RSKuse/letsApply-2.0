@@ -13,6 +13,11 @@ Publishing is intentionally separate from parsing. The GitHub workflow needs a r
 
 The importer only publishes source metadata and application instructions found in the official circular. Candidates still review and approve applications in the app.
 
+The scheduled workflow checks DPSA on Friday evening and Saturday morning.
+Each run imports every post in the latest full circular, including department-level
+application instructions, email or website destinations, and stated experience.
+Vacancies left over from an older DPSA circular are marked expired.
+
 ## Approved Partner Feeds
 
 `import_partner_jobs.py` supports documented public job-board APIs. It does not

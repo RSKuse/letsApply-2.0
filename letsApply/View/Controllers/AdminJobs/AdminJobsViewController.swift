@@ -119,7 +119,15 @@ class AdminJobsViewController: UIViewController {
             action: #selector(addJobTapped)
         )
         addButton.accessibilityLabel = "Create vacancy"
-        navigationItem.rightBarButtonItem = addButton
+
+        let importButton = UIBarButtonItem(
+            image: UIImage(systemName: "link.badge.plus"),
+            style: .plain,
+            target: self,
+            action: #selector(importSourceTapped)
+        )
+        importButton.accessibilityLabel = "Import vacancy source"
+        navigationItem.rightBarButtonItems = [addButton, importButton]
     }
 
     private func setupUI() {
@@ -307,6 +315,14 @@ class AdminJobsViewController: UIViewController {
 
     @objc private func addJobTapped() {
         openEditor()
+    }
+
+    @objc private func importSourceTapped() {
+        let controller = AdminSourceImportViewController(isDebugMode: isDebugMode)
+        controller.onPublished = { [weak self] in
+            self?.fetchJobs()
+        }
+        navigationController?.pushViewController(controller, animated: true)
     }
 
     private func showAlert(title: String, message: String) {

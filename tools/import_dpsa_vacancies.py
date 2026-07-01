@@ -39,6 +39,23 @@ FIELD_LABELS = (
     "APPLICATION",
     "NOTE",
 )
+ANNEXURE_PATTERN = re.compile(r"(?m)^ANNEXURE\s+[A-Z0-9]+\s*$")
+NUMBER_WORDS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "fifteen": 15,
+}
 
 
 def fetch_url(url: str) -> bytes:
@@ -140,19 +157,40 @@ def nearby_value(text: str, position: int, label: str, lookback: int = 14000) ->
     return clean_inline(matches[-1].group(1)) if matches else ""
 
 
+def annexure_start(text: str, position: int) -> int:
+    matches = list(ANNEXURE_PATTERN.finditer(text[:position]))
+    return matches[-1].start() if matches else max(0, position - 180000)
+
+
+def section_value(text: str, position: int, label: str) -> str:
+    section = text[annexure_start(text, position):position]
+    labels = "|".join(re.escape(item) for item in FIELD_LABELS + ("CLOSING DATE", "FOR ATTENTION"))
+    pattern = re.compile(
+        rf"(?ms)^{re.escape(label)}\s*:\s*(.*?)(?=^(?:{labels})\s*:|^POST\s+\d|\Z)"
+    )
+    matches = list(pattern.finditer(section))
+    return clean_inline(matches[-1].group(1)) if matches else ""
+
+
 def department_before(text: str, position: int) -> str:
-    preceding = text[max(0, position - 180000):position]
+    preceding = text[annexure_start(text, position):position]
     patterns = [
-        re.compile(r"(?m)^DEPARTMENT OF [A-Z][A-Z0-9 &,'()/-]+$"),
-        re.compile(r"(?m)^[A-Z][A-Z0-9 &,'()/-]+ DEPARTMENT$"),
-        re.compile(r"(?m)^PROVINCIAL ADMINISTRATION:\s*([A-Z][A-Z ]+)$"),
+        re.compile(r"(?m)^(?:THE )?DEPARTMENT OF[,]? [A-Z][A-Z0-9 &,'()/-]+[ \t]*$"),
+        re.compile(r"(?m)^[A-Z][A-Z0-9 &,'()/-]+ DEPARTMENT[ \t]*$"),
+        re.compile(r"(?m)^PROVINCIAL ADMINISTRATION:\s*([A-Z][A-Z ]+)[ \t]*$"),
+        re.compile(r"(?m)^OFFICE OF THE [A-Z][A-Z0-9 &,'()/-]+[ \t]*$"),
+        re.compile(r"(?m)^GOVERNMENT COMMUNICATIONS AND INFORMATION SYSTEM[ \t]*$"),
+        re.compile(r"(?m)^SOUTH AFRICAN POLICE SERVICE[ \t]*$"),
+        re.compile(r"(?m)^THE PRESIDENCY[ \t]*$"),
     ]
     candidates = []
     for pattern in patterns:
         candidates.extend((match.start(), clean_inline(match.group(0))) for match in pattern.finditer(preceding))
     if not candidates:
         return "South African Public Service"
-    return max(candidates, key=lambda item: item[0])[1].title()
+    department = max(candidates, key=lambda item: item[0])[1]
+    department = re.sub(r"^DEPARTMENT OF,\s*", "DEPARTMENT OF ", department)
+    return department.title()
 
 
 def parse_salary(value: str) -> tuple[int, int, str, str]:
@@ -199,8 +237,55 @@ def first_email(value: str) -> str:
 
 
 def first_url(value: str) -> str:
-    match = re.search(r"https?://[^\s)>]+", value)
-    return match.group(0).rstrip(".,;") if match else ""
+    match = re.search(r"(?:https?://|www\.)[^\s)>]+", value, re.IGNORECASE)
+    if not match:
+        return ""
+    url = match.group(0).rstrip(".,;")
+    return url if url.lower().startswith("http") else f"https://{url}"
+
+
+def parse_experience(value: str) -> tuple[int, int]:
+    if not value:
+        return 0, 0
+
+    chunks = re.split(r"(?<=[.;])\s+|\n+", clean_inline(value))
+    candidates = []
+    number_words = "|".join(NUMBER_WORDS)
+    for chunk in chunks:
+        lowered = chunk.lower().replace("’", "'")
+        if "experience" not in lowered:
+            continue
+
+        parenthesized = re.search(
+            rf"\b(?:{number_words})\s*\((\d+)\)\s*years?",
+            lowered,
+        )
+        numeric = re.search(r"\b(\d{1,2})\s*years?", lowered)
+        written = re.search(rf"\b({number_words})\s+years?", lowered)
+
+        if parenthesized:
+            candidates.append(int(parenthesized.group(1)))
+        elif numeric:
+            candidates.append(int(numeric.group(1)))
+        elif written:
+            candidates.append(NUMBER_WORDS[written.group(1)])
+
+    if not candidates:
+        return 0, 0
+    required = candidates[0]
+    return required, required
+
+
+def experience_details(value: str) -> str:
+    chunks = re.split(r"(?<=[.;])\s+|\n+", clean_inline(value))
+    matches = [
+        clean_inline(chunk)
+        for chunk in chunks
+        if "experience" in chunk.lower() and len(clean_inline(chunk)) > 2
+    ]
+    if not matches:
+        return ""
+    return ". ".join(matches[:3]).rstrip(".") + "."
 
 
 def first_date(value: str) -> str:
@@ -254,12 +339,13 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
         application_text = (
             find_field(segment, "APPLICATIONS")
             or find_field(segment, "APPLICATION")
-            or nearby_value(text, match.start(), "APPLICATIONS")
-            or nearby_value(text, match.start(), "APPLICATION")
+            or section_value(text, match.start(), "APPLICATIONS")
+            or section_value(text, match.start(), "APPLICATION")
         )
-        closing_text = nearby_value(text, match.start(), "CLOSING DATE")
+        closing_text = section_value(text, match.start(), "CLOSING DATE")
         closing_date = first_date(closing_text)
         minimum, maximum, currency, period = parse_salary(salary_text)
+        minimum_years, preferred_years = parse_experience(requirements_text)
 
         combined_instructions = f"{application_text} {requirements_text}".lower()
         requires_z83 = True
@@ -288,9 +374,9 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "responsibilities": split_sentences(duties_text, maximum=12),
                 "requirements": split_sentences(requirements_text, maximum=12),
                 "experience": {
-                    "minYears": 0,
-                    "preferredYears": 0,
-                    "details": requirements_text,
+                    "minYears": minimum_years,
+                    "preferredYears": preferred_years,
+                    "details": experience_details(requirements_text),
                 },
                 "compensation": {
                     "salaryRange": {
@@ -354,6 +440,7 @@ def publish_jobs(jobs: list[dict]) -> None:
     if not firebase_admin._apps:
         firebase_admin.initialize_app(credentials.Certificate(credential_data))
     database = firestore.client()
+    imported_ids = {job["id"] for job in jobs}
 
     for start in range(0, len(jobs), 400):
         batch = database.batch()
@@ -362,6 +449,29 @@ def publish_jobs(jobs: list[dict]) -> None:
             payload = dict(job)
             payload.pop("id", None)
             batch.set(document, payload, merge=True)
+        batch.commit()
+
+    existing = database.collection("jobs").where(
+        "sourceName",
+        "==",
+        "DPSA Public Service Vacancy Circular",
+    ).stream()
+    stale_documents = [
+        document.reference
+        for document in existing
+        if document.id not in imported_ids
+    ]
+    expired_at = datetime.now(timezone.utc).isoformat()
+    for start in range(0, len(stale_documents), 400):
+        batch = database.batch()
+        for document in stale_documents[start:start + 400]:
+            batch.update(
+                document,
+                {
+                    "publicationStatus": "expired",
+                    "expiredAt": expired_at,
+                },
+            )
         batch.commit()
 
 

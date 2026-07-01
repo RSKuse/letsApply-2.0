@@ -17,8 +17,12 @@ class AutoApplyAssistantViewController: UIViewController {
     private let aiCareerService = AICareerService()
     private let firestoreService = FirestoreService()
     private let pdfService = CVPDFService()
+    private let z83PDFService = Z83PDFService()
+    private let z83ProfileStore = Z83ProfileStore()
     private var autoApplyPackage: AutoApplyPackage?
+    private var preparedZ83URL: URL?
     private var isSubmitting = false
+    private var didRunDebugAutomation = false
 
     private lazy var scrollView: UIScrollView = {
         let scrollView = UIScrollView()
@@ -76,6 +80,20 @@ class AutoApplyAssistantViewController: UIViewController {
         stackView.spacing = 8
         stackView.translatesAutoresizingMaskIntoConstraints = false
         return stackView
+    }()
+
+    private lazy var prepareZ83Button: UIButton = {
+        let button = UIButton(type: .system)
+        button.configuration = AppTheme.primaryButtonConfiguration(
+            title: "Complete and Sign Z83",
+            systemImageName: "signature"
+        )
+        button.configuration?.baseBackgroundColor = AppTheme.mutedSurface
+        button.configuration?.baseForegroundColor = AppTheme.brand
+        button.addTarget(self, action: #selector(prepareZ83Tapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        return button
     }()
 
     private lazy var scoreLabel: UILabel = {
@@ -407,6 +425,11 @@ class AutoApplyAssistantViewController: UIViewController {
         let checklistItems = requiredChecklistItems()
         checklistCardView.isHidden = checklistItems.isEmpty
 
+        if job.requiresGovernmentFlow {
+            refreshPreparedZ83()
+            checklistStackView.addArrangedSubview(prepareZ83Button)
+        }
+
         checklistItems.forEach { item in
             let button = UIButton(type: .system)
             var configuration = UIButton.Configuration.plain()
@@ -428,6 +451,16 @@ class AutoApplyAssistantViewController: UIViewController {
             }
             button.configuration = configuration
             button.contentHorizontalAlignment = .leading
+            if item.lowercased().contains("z83") {
+                button.isSelected = preparedZ83URL != nil
+                button.configuration?.image = UIImage(
+                    systemName: button.isSelected ? "checkmark.circle.fill" : "circle"
+                )
+                button.configuration?.baseForegroundColor = button.isSelected
+                    ? AppTheme.brand
+                    : .label
+                button.isUserInteractionEnabled = false
+            }
             button.addTarget(self, action: #selector(checklistItemTapped(_:)), for: .touchUpInside)
             checklistStackView.addArrangedSubview(button)
         }
@@ -515,6 +548,14 @@ class AutoApplyAssistantViewController: UIViewController {
                 }
             } catch {
                 print("LET_APPLY_DEBUG_DOCUMENT_ERROR=\(error.localizedDescription)")
+            }
+        }
+
+        if !didRunDebugAutomation,
+           ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_EMAIL_PREVIEW"] == "1" {
+            didRunDebugAutomation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.openEmailPreview()
             }
         }
         #endif
@@ -641,7 +682,16 @@ class AutoApplyAssistantViewController: UIViewController {
             return
         }
 
-        guard let user = Auth.auth().currentUser, !user.isAnonymous, user.uid == userProfile.uid else {
+        #if DEBUG
+        let debugAccess = ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_AUTH"] == "1"
+        #else
+        let debugAccess = false
+        #endif
+
+        guard debugAccess
+                || (Auth.auth().currentUser.map {
+                    !$0.isAnonymous && $0.uid == userProfile.uid
+                } ?? false) else {
             showAlert(title: "Create Profile", message: "Please sign in before submitting this application.")
             return
         }
@@ -677,6 +727,19 @@ class AutoApplyAssistantViewController: UIViewController {
             systemName: sender.isSelected ? "checkmark.circle.fill" : "circle"
         )
         sender.configuration?.baseForegroundColor = sender.isSelected ? AppTheme.brand : .label
+    }
+
+    @objc private func prepareZ83Tapped() {
+        let editor = Z83EditorViewController(job: job, userProfile: userProfile)
+        editor.onZ83Ready = { [weak self] url in
+            self?.preparedZ83URL = url
+            self?.configureChecklist()
+            self?.showAlert(
+                title: "Z83 Ready",
+                message: "The signed Z83 will be included with this application. You can reopen it to review or edit it before submitting."
+            )
+        }
+        navigationController?.pushViewController(editor, animated: true)
     }
 
     private func confirmationContent() -> (title: String, message: String, actionTitle: String) {
@@ -799,16 +862,45 @@ class AutoApplyAssistantViewController: UIViewController {
     }
 
     private func showEmailFallbackAlert() {
+        let title: String
+        let message: String
+        #if targetEnvironment(simulator)
+        title = "Simulator Email Preview"
+        message = "Apple Mail cannot send from iOS Simulator. Preview the complete prepared email and all attachments here, then test the final Send action on a physical iPhone."
+        #else
+        title = "Mail Is Not Set Up"
+        message = "Configure an account in Apple Mail, or preview and share the generated application documents with your preferred email app."
+        #endif
+
         let alert = UIAlertController(
-            title: "Mail Is Not Set Up",
-            message: "Export the CV and cover letter, then attach them in your preferred email app. The recruiter email and draft remain available on this screen.",
+            title: title,
+            message: message,
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "Export Documents", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "Preview Prepared Email", style: .default) { [weak self] _ in
+            self?.openEmailPreview()
+        })
+        alert.addAction(UIAlertAction(title: "Share Documents", style: .default) { [weak self] _ in
             self?.presentDocumentExport(openDestinationAfter: false)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
+    }
+
+    private func openEmailPreview() {
+        do {
+            let urls = try generatedDocumentURLs()
+            let draft = emailDraftParts()
+            let preview = EmailApplicationPreviewViewController(
+                recipient: job.application.applicationEmail,
+                subject: draft.subject ?? "Application for \(job.title)",
+                body: draft.body ?? "",
+                attachmentURLs: urls
+            )
+            navigationController?.pushViewController(preview, animated: true)
+        } catch {
+            showAlert(title: "Documents Not Ready", message: error.localizedDescription)
+        }
     }
 
     private func showManualInstructions() {
@@ -856,7 +948,43 @@ class AutoApplyAssistantViewController: UIViewController {
             job: job,
             text: coverLetterTextView.text ?? ""
         )
-        return [cvURL, coverLetterURL]
+        var urls = [cvURL, coverLetterURL]
+        if job.requiresGovernmentFlow {
+            guard let z83URL = resolvedZ83URL() else {
+                throw Z83PDFService.Z83PDFError.incomplete([
+                    "open Complete and Sign Z83, review the declarations, and add your signature"
+                ])
+            }
+            urls.insert(z83URL, at: 0)
+        }
+        return urls
+    }
+
+    private func refreshPreparedZ83() {
+        guard job.requiresGovernmentFlow,
+              let profile = z83ProfileStore.load(userId: userProfile.uid),
+              profile.isComplete else {
+            preparedZ83URL = nil
+            prepareZ83Button.configuration?.title = "Complete and Sign Z83"
+            prepareZ83Button.configuration?.image = UIImage(systemName: "signature")
+            return
+        }
+
+        preparedZ83URL = try? z83PDFService.generateZ83(
+            profile: profile,
+            userProfile: userProfile,
+            job: job
+        )
+        prepareZ83Button.configuration?.title = "Review or Edit Z83"
+        prepareZ83Button.configuration?.image = UIImage(systemName: "checkmark.seal.fill")
+    }
+
+    private func resolvedZ83URL() -> URL? {
+        if let preparedZ83URL, FileManager.default.fileExists(atPath: preparedZ83URL.path) {
+            return preparedZ83URL
+        }
+        refreshPreparedZ83()
+        return preparedZ83URL
     }
 
     private func presentDocumentExport(openDestinationAfter: Bool) {

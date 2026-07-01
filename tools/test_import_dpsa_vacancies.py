@@ -1,7 +1,12 @@
 import unittest
 from unittest.mock import patch
 
-from import_dpsa_vacancies import DPSA_NEWSROOM_URL, discover_latest_pdf, parse_jobs
+from import_dpsa_vacancies import (
+    DPSA_NEWSROOM_URL,
+    discover_latest_pdf,
+    parse_experience,
+    parse_jobs,
+)
 
 
 class DPSAImporterTests(unittest.TestCase):
@@ -34,6 +39,40 @@ APPLICATIONS : Email jobs@example.gov.za before the closing date.
         self.assertEqual(job["closingDate"], "2026-07-10")
         self.assertTrue(job["application"]["requiresZ83"])
         self.assertTrue(job["application"]["requiresDriversLicense"])
+        self.assertEqual(job["experience"]["minYears"], 3)
+
+    def test_inherits_presidency_application_destination(self):
+        text = """
+ANNEXURE N
+
+THE PRESIDENCY
+APPLICATIONS : Apply by email to applications@presidency.gov.za or hand deliver at
+Government Avenue, Union Buildings, Pretoria.
+CLOSING DATE : 10 July 2026
+
+POST 22/140 : DIRECTOR: POLICY (REF NO: PRES/01/2026)
+SALARY : R1 216 824 per annum
+CENTRE : Pretoria
+REQUIREMENTS : An appropriate degree and at least five (5) years' relevant experience.
+DUTIES : Lead policy development and provide strategic advice.
+ENQUIRIES : Ms Example Tel: 012 000 0000
+"""
+
+        job = parse_jobs(text, "https://www.dpsa.gov.za/circular-22.pdf")[0]
+
+        self.assertEqual(job["companyName"], "The Presidency")
+        self.assertEqual(
+            job["application"]["applicationEmail"],
+            "applications@presidency.gov.za",
+        )
+        self.assertEqual(job["application"]["method"], "governmentEmail")
+        self.assertEqual(job["experience"]["minYears"], 5)
+
+    def test_experience_without_a_stated_year_does_not_invent_zero_years(self):
+        self.assertEqual(
+            parse_experience("Relevant management experience will be an advantage."),
+            (0, 0),
+        )
 
     @patch("import_dpsa_vacancies.fetch_url")
     def test_latest_circular_prefers_newest_year_before_number(self, fetch_url):
