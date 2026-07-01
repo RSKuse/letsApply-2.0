@@ -7,7 +7,7 @@ import UIKit
 
 class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
 
-    private let insights: [CareerInsight] = [
+    private static let insightLibrary: [CareerInsight] = [
         CareerInsight(
             category: "Application intelligence",
             title: "One profile. Better applications.",
@@ -77,9 +77,17 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
             detail: "Your skills can solve problems for an employer, a client, or a business of your own.",
             systemImageName: "lightbulb.max.fill",
             style: .green
+        ),
+        CareerInsight(
+            category: "Interview day",
+            title: "Check the route and weather twice.",
+            detail: "Arrive with time to settle. A calm entrance gives your preparation room to show.",
+            systemImageName: "cloud.sun.fill",
+            style: .ocean
         )
     ]
 
+    private let insights: [CareerInsight]
     private var rotationTimer: Timer?
     private var currentIndex = 0
 
@@ -112,6 +120,7 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
     }()
 
     override init(frame: CGRect) {
+        insights = Self.makeDailyInsights()
         super.init(frame: frame)
         setupUI()
     }
@@ -198,7 +207,11 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
             withReuseIdentifier: AdvertCell.reuseIdentifier,
             for: indexPath
         ) as! AdvertCell
-        cell.configure(with: insights[indexPath.item])
+        cell.configure(
+            with: insights[indexPath.item],
+            position: indexPath.item + 1,
+            total: insights.count
+        )
         return cell
     }
 
@@ -235,5 +248,38 @@ class AdvertContainerView: UIView, UICollectionViewDataSource, UICollectionViewD
         ))
         currentIndex = min(max(page, 0), insights.count - 1)
         pageControl.currentPage = currentIndex
+    }
+
+    private static func makeDailyInsights() -> [CareerInsight] {
+        let calendar = Calendar.current
+        let day = calendar.ordinality(of: .day, in: .year, for: Date()) ?? 1
+        let hour = calendar.component(.hour, from: Date())
+        let greeting: String
+
+        switch hour {
+        case 5..<12:
+            greeting = "Good morning. Start with the role that fits best."
+        case 12..<17:
+            greeting = "Good afternoon. Make the next application count."
+        default:
+            greeting = "Good evening. Prepare tomorrow’s opportunity tonight."
+        }
+
+        let dailyPulse = CareerInsight(
+            category: "Today’s career pulse",
+            title: greeting,
+            detail: "One focused, well-reviewed application is stronger than five rushed submissions.",
+            systemImageName: "scope",
+            style: .ink
+        )
+
+        let library = insightLibrary
+        guard !library.isEmpty else { return [dailyPulse] }
+
+        let startIndex = day % library.count
+        let rotatingInsights = (0..<min(5, library.count)).map {
+            library[(startIndex + $0) % library.count]
+        }
+        return [dailyPulse] + rotatingInsights
     }
 }

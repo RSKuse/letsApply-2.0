@@ -19,16 +19,10 @@ class JobCollectionViewCell: UICollectionViewCell {
         return view
     }()
 
-    private lazy var companyIconView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.backgroundColor = AppTheme.mutedSurface
-        imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = AppTheme.cardRadius
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+    private lazy var companyIconView: CompanyLogoView = {
+        let view = CompanyLogoView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
     private lazy var jobTypeLabel: UILabel = {
@@ -88,6 +82,11 @@ class JobCollectionViewCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        companyIconView.reset()
+    }
+
     private func setupUI() {
         contentView.addSubview(cardView)
         cardView.addSubview(companyIconView)
@@ -132,6 +131,7 @@ class JobCollectionViewCell: UICollectionViewCell {
     }
 
     func configure(with job: Job) {
+        companyIconView.configure(with: job)
         jobTitleLabel.text = job.title
         companyLabel.text = job.companyName
         locationLabel.text = job.locationText

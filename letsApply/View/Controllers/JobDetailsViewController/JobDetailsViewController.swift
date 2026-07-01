@@ -50,16 +50,10 @@ class JobDetailsViewController: UIViewController {
         return view
     }()
 
-    private lazy var companyIconView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.backgroundColor = AppTheme.mutedSurface
-        imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = AppTheme.cardRadius
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+    private lazy var companyIconView: CompanyLogoView = {
+        let view = CompanyLogoView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
     private lazy var titleLabel: UILabel = {
@@ -218,6 +212,7 @@ class JobDetailsViewController: UIViewController {
     }
 
     private func configure() {
+        companyIconView.configure(with: job)
         titleLabel.text = job.title
         companyLabel.text = "\(job.companyName)\n\(job.locationText)"
     }

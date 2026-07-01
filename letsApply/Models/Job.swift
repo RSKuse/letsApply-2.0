@@ -11,6 +11,7 @@ struct Job: Codable {
     let title: String
     let companyName: String
     let companyImageName: String?
+    let companyLogoURL: String?
     let location: Location
     let jobType: String
     let remote: Bool
@@ -39,6 +40,7 @@ struct Job: Codable {
         title: String,
         companyName: String,
         companyImageName: String?,
+        companyLogoURL: String? = nil,
         location: Location,
         jobType: String,
         remote: Bool,
@@ -66,6 +68,7 @@ struct Job: Codable {
         self.title = title
         self.companyName = companyName
         self.companyImageName = companyImageName
+        self.companyLogoURL = companyLogoURL
         self.location = location
         self.jobType = jobType
         self.remote = remote

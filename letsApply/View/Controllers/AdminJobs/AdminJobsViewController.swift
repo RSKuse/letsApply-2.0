@@ -345,6 +345,7 @@ private extension AdminJobsViewController {
             title: job.title,
             companyName: job.companyName,
             companyImageName: job.companyImageName,
+            companyLogoURL: job.companyLogoURL,
             location: job.location,
             jobType: job.jobType,
             remote: job.remote,

@@ -55,12 +55,17 @@ def discover_latest_pdf() -> str:
     candidates = []
     for raw_url in OFFICIAL_PDF_PATTERN.findall(page):
         url = urllib.parse.urljoin(DPSA_NEWSROOM_URL, html.unescape(raw_url))
-        match = re.search(r"CIRCULAR(?:%20|\s)*0*(\d+)", url, re.IGNORECASE)
+        decoded_url = urllib.parse.unquote(url)
+        match = re.search(
+            r"CIRCULAR\s*0*(\d+)\s*of\s*(\d{4})",
+            decoded_url,
+            re.IGNORECASE,
+        )
         if match:
-            candidates.append((int(match.group(1)), url))
+            candidates.append((int(match.group(2)), int(match.group(1)), url))
 
     if candidates:
-        return max(candidates, key=lambda value: value[0])[1]
+        return max(candidates, key=lambda value: (value[0], value[1]))[2]
 
     circular_pages = []
     for raw_url, number, year in CIRCULAR_PAGE_PATTERN.findall(page):
@@ -270,6 +275,7 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "title": title,
                 "companyName": department,
                 "companyImageName": "",
+                "companyLogoURL": "",
                 "location": {
                     "city": centre,
                     "region": "",

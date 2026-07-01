@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 
-from import_dpsa_vacancies import parse_jobs
+from import_dpsa_vacancies import DPSA_NEWSROOM_URL, discover_latest_pdf, parse_jobs
 
 
 class DPSAImporterTests(unittest.TestCase):
@@ -33,6 +34,21 @@ APPLICATIONS : Email jobs@example.gov.za before the closing date.
         self.assertEqual(job["closingDate"], "2026-07-10")
         self.assertTrue(job["application"]["requiresZ83"])
         self.assertTrue(job["application"]["requiresDriversLicense"])
+
+    @patch("import_dpsa_vacancies.fetch_url")
+    def test_latest_circular_prefers_newest_year_before_number(self, fetch_url):
+        fetch_url.return_value = b"""
+        <a href="/documents/PSV%20CIRCULAR%2047%20of%202025.pdf">Old</a>
+        <a href="/documents/PSV%20CIRCULAR%2022%20of%202026.pdf">New</a>
+        """
+
+        result = discover_latest_pdf()
+
+        self.assertEqual(
+            result,
+            "https://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2022%20of%202026.pdf",
+        )
+        fetch_url.assert_called_once_with(DPSA_NEWSROOM_URL)
 
 
 if __name__ == "__main__":

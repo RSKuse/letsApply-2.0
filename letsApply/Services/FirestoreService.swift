@@ -450,6 +450,9 @@ class FirestoreService {
             title: data["title"] as? String ?? "Untitled Vacancy",
             companyName: finalCompanyName,
             companyImageName: data["companyImageName"] as? String ?? data["company_image_name"] as? String,
+            companyLogoURL: data["companyLogoURL"] as? String
+                ?? data["companyLogoUrl"] as? String
+                ?? data["logoUrl"] as? String,
             location: location,
             jobType: finalJobType,
             remote: data["remote"] as? Bool ?? false,
@@ -486,6 +489,7 @@ class FirestoreService {
             "title": job.title,
             "companyName": job.companyName,
             "companyImageName": job.companyImageName ?? "",
+            "companyLogoURL": job.companyLogoURL ?? "",
             "location": [
                 "city": job.location.city,
                 "region": job.location.region,
