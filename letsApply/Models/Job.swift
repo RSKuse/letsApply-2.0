@@ -127,15 +127,15 @@ struct Job: Codable {
         case "governmentwebsite":
             return .governmentWebsite
         case "governmentmanual":
-            return .governmentManual
+            return resolvedApplicationURLString.isEmpty ? .governmentManual : .governmentWebsite
         case "pdfcircular":
-            return .pdfCircular
+            return resolvedApplicationURLString.isEmpty ? .pdfCircular : .governmentWebsite
         case "form", "requiredform", "z83":
             if requiresGovernmentFlow {
                 if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return .governmentEmail
                 }
-                if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !resolvedApplicationURLString.isEmpty {
                     return .governmentWebsite
                 }
                 return .governmentManual
@@ -152,7 +152,7 @@ struct Job: Codable {
                 return .governmentEmail
             }
 
-            if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !resolvedApplicationURLString.isEmpty {
                 return .governmentWebsite
             }
 
@@ -165,7 +165,7 @@ struct Job: Codable {
             return .email
         }
 
-        if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !resolvedApplicationURLString.isEmpty {
             return .externalWebsite
         }
 
@@ -174,6 +174,47 @@ struct Job: Codable {
         }
 
         return .internalApply
+    }
+
+    var resolvedApplicationURLString: String {
+        let suppliedURL = application.applicationUrl
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if Self.isValidWebAddress(suppliedURL) {
+            return suppliedURL.lowercased().hasPrefix("http")
+                ? suppliedURL
+                : "https://\(suppliedURL)"
+        }
+
+        let department = companyName.lowercased()
+        if department.contains("higher education") {
+            return "https://z83.ngnscan.co.za/login"
+        }
+
+        return ""
+    }
+
+    var applicationWebsiteName: String {
+        let department = companyName.lowercased()
+        if department.contains("higher education") {
+            return "DHET e-Recruitment"
+        }
+        return requiresGovernmentFlow
+            ? "Official government application website"
+            : "Employer application website"
+    }
+
+    private static func isValidWebAddress(_ value: String) -> Bool {
+        guard !value.isEmpty else { return false }
+        let normalized = value.lowercased().hasPrefix("http")
+            ? value
+            : "https://\(value)"
+        guard let url = URL(string: normalized),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return false
+        }
+        return true
     }
 
     var applicationRoute: JobApplicationRoute {

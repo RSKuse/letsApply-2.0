@@ -805,6 +805,52 @@ class FirestoreService {
             }
     }
 
+    func deleteApplication(
+        applicationId: String,
+        userId: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard !applicationId.isEmpty, !userId.isEmpty else {
+            completion(NSError(
+                domain: "ApplicationError",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "This application could not be identified."]
+            ))
+            return
+        }
+
+        let document = db.collection(FirebaseCollections.applications.rawValue)
+            .document(applicationId)
+        document.getDocument { snapshot, error in
+            if let error {
+                completion(self.makeFirestorePermissionError(
+                    fallback: "Let’s Apply could not verify this application before deleting it.",
+                    error: error
+                ))
+                return
+            }
+
+            guard let data = snapshot?.data(),
+                  data["userId"] as? String == userId else {
+                completion(NSError(
+                    domain: "ApplicationError",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "You can only delete your own applications."]
+                ))
+                return
+            }
+
+            document.delete { deleteError in
+                completion(deleteError.map {
+                    self.makeFirestorePermissionError(
+                        fallback: "Let’s Apply could not delete this application.",
+                        error: $0
+                    )
+                })
+            }
+        }
+    }
+
     func saveJob(userId: String, job: Job, completion: @escaping (Error?) -> Void) {
         guard let jobId = job.id, !jobId.isEmpty else {
             completion(NSError(

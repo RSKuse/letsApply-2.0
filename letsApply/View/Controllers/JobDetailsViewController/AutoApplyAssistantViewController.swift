@@ -615,7 +615,7 @@ class AutoApplyAssistantViewController: UIViewController {
             case .governmentEmail:
                 return "Review the government checklist first. Submit Application then opens a prepared email with your CV and cover letter attached for your approval."
             case .governmentWebsite:
-                return "Review the government checklist and save your documents. Submit Application then opens the official vacancy website."
+                return "Complete the government checklist, prepare your Z83, CV, and cover letter, then continue to \(job.applicationWebsiteName) to finish the official submission."
             case .governmentManual, .pdfCircular:
                 return job.application.applicationInstructions.isEmpty
                     ? "Review the circular, Z83 requirements, supporting documents, reference number, and delivery instructions before continuing."
@@ -631,7 +631,7 @@ class AutoApplyAssistantViewController: UIViewController {
         case .email:
             return "A ready-to-send email will open with the employer’s address, your message, CV, and cover letter. You review it and tap Send."
         case .externalPortal:
-            return "The employer’s website will open for you to complete its questions and attach the documents prepared here."
+            return "Your documents will be prepared first. You can save or share them, copy the official link, and then continue to \(job.applicationWebsiteName)."
         case .requiredForm:
             let formName = job.application.formName.isEmpty ? "the required employment form" : job.application.formName
             let requiredItems = job.application.requiredForms + job.application.requiredDocuments
@@ -653,7 +653,7 @@ class AutoApplyAssistantViewController: UIViewController {
         case .email:
             return "Mail opens next with your documents attached. The application is tracked only after Mail confirms that you sent it."
         case .externalPortal:
-            return "Share or save your documents first if needed. The employer’s application website opens when you continue."
+            return "Save or share the prepared documents before opening the official website. The application remains marked Continue until you finish it there."
         case .requiredForm:
             return "Export the prepared documents, open the required form, and check every declaration before signing or submitting."
         case .manual:
@@ -758,9 +758,9 @@ class AutoApplyAssistantViewController: UIViewController {
             )
         case .externalPortal:
             return (
-                "Continue on Employer Website?",
-                "Your application will be saved as ready to continue, then the employer’s website will open for its questions and declarations.",
-                "Open Website"
+                "Prepare Website Application?",
+                "Let’s Apply will keep your Z83, CV, and cover letter ready, then give you options to save the documents or open the official application website.",
+                "Continue"
             )
         case .requiredForm:
             return (
@@ -788,7 +788,7 @@ class AutoApplyAssistantViewController: UIViewController {
             openEmailApplication()
         case .externalPortal, .requiredForm:
             saveApplication(status: "ready-to-submit") { [weak self] in
-                self?.openApplicationDestination()
+                self?.showPortalHandoffOptions()
             }
         case .manual:
             saveApplication(status: "requires-manual-action") { [weak self] in
@@ -919,6 +919,39 @@ class AutoApplyAssistantViewController: UIViewController {
         present(alert, animated: true)
     }
 
+    private func showPortalHandoffOptions() {
+        guard applicationDestinationURL() != nil else {
+            showAlert(
+                title: "Application Website Missing",
+                message: "The vacancy does not include a verified application website. Your documents remain ready to share manually."
+            )
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "Application Package Ready",
+            message: "Save or share your documents before completing the official questions and declarations on \(job.applicationWebsiteName).",
+            preferredStyle: .actionSheet
+        )
+        alert.addAction(UIAlertAction(title: "Save or Share Documents", style: .default) { [weak self] _ in
+            self?.presentDocumentExport(openDestinationAfter: false)
+        })
+        alert.addAction(UIAlertAction(title: "Open Official Website", style: .default) { [weak self] _ in
+            self?.openApplicationDestination()
+        })
+        alert.addAction(UIAlertAction(title: "Copy Website Link", style: .default) { [weak self] _ in
+            guard let self, let url = self.applicationDestinationURL() else { return }
+            UIPasteboard.general.string = url.absoluteString
+            self.showAlert(
+                title: "Website Copied",
+                message: "The official application link is ready to paste into Safari."
+            )
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.popoverPresentationController?.sourceView = approveButton
+        present(alert, animated: true)
+    }
+
     private func manualInstructionsText() -> String {
         let values = [
             job.application.applicationInstructions,
@@ -1018,7 +1051,7 @@ class AutoApplyAssistantViewController: UIViewController {
     }
 
     private func applicationDestinationURL() -> URL? {
-        let rawURL = job.application.applicationUrl
+        let rawURL = job.resolvedApplicationURLString
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !rawURL.isEmpty {

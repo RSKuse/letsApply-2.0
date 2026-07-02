@@ -387,20 +387,28 @@ class JobDetailsViewController: UIViewController {
         )
         copyEmailButton.isHidden = emailLabel.isHidden
 
+        let applicationWebsite = job.resolvedApplicationURLString
         let websiteLabel = applicationDetailLabel(
             title: "Application website",
-            value: job.application.applicationUrl
+            value: applicationWebsite
         )
-        websiteLabel.isHidden = job.application.applicationUrl
+        websiteLabel.isHidden = applicationWebsite
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
 
         let openWebsiteButton = applicationActionButton(
-            title: "Open application website",
+            title: "Open \(job.applicationWebsiteName)",
             imageName: "safari",
             action: #selector(openApplicationWebsiteTapped)
         )
         openWebsiteButton.isHidden = websiteLabel.isHidden
+
+        let copyWebsiteButton = applicationActionButton(
+            title: "Copy application website",
+            imageName: "doc.on.doc",
+            action: #selector(copyApplicationWebsiteTapped)
+        )
+        copyWebsiteButton.isHidden = websiteLabel.isHidden
 
         let instructions = job.application.applicationInstructions
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -434,6 +442,7 @@ class JobDetailsViewController: UIViewController {
             copyEmailButton,
             websiteLabel,
             openWebsiteButton,
+            copyWebsiteButton,
             instructionsLabel,
             copyInstructionsButton,
             sourceButton
@@ -546,7 +555,17 @@ class JobDetailsViewController: UIViewController {
     }
 
     @objc private func openApplicationWebsiteTapped() {
-        openURL(job.application.applicationUrl, missingTitle: "Application Website Missing")
+        openURL(job.resolvedApplicationURLString, missingTitle: "Application Website Missing")
+    }
+
+    @objc private func copyApplicationWebsiteTapped() {
+        let website = job.resolvedApplicationURLString
+        guard !website.isEmpty else { return }
+        UIPasteboard.general.string = website
+        showAlert(
+            title: "Website Copied",
+            message: "The official application website is ready to paste into Safari."
+        )
     }
 
     @objc private func openSourceTapped() {

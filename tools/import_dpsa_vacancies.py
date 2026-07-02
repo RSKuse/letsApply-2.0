@@ -302,12 +302,22 @@ def first_date(value: str) -> str:
         return match.group(1)
 
 
-def application_method(application_text: str, requires_z83: bool) -> str:
+def known_department_portal(department: str) -> str:
+    normalized = department.lower()
+    if "higher education" in normalized:
+        return "https://z83.ngnscan.co.za/login"
+    return ""
+
+
+def application_method(
+    application_text: str,
+    requires_z83: bool,
+    application_url: str = "",
+) -> str:
     email = first_email(application_text)
-    url = first_url(application_text)
     if email:
         return "governmentEmail" if requires_z83 else "email"
-    if url:
+    if application_url or first_url(application_text):
         return "governmentWebsite" if requires_z83 else "externalWebsite"
     return "governmentManual" if requires_z83 else "manualInstruction"
 
@@ -352,8 +362,15 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
         requires_certified = "certified" in combined_instructions
         requires_license = "driver" in requirements_text.lower() and "licence" in requirements_text.lower()
         application_email = first_email(application_text)
-        application_url = first_url(application_text)
-        method = application_method(application_text, requires_z83)
+        application_url = (
+            first_url(application_text)
+            or known_department_portal(department)
+        )
+        method = application_method(
+            application_text,
+            requires_z83,
+            application_url,
+        )
 
         jobs.append(
             {

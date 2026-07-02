@@ -74,6 +74,30 @@ ENQUIRIES : Ms Example Tel: 012 000 0000
             (0, 0),
         )
 
+    def test_uses_known_department_portal_when_circular_has_no_email(self):
+        text = """
+ANNEXURE H
+
+DEPARTMENT OF HIGHER EDUCATION AND TRAINING
+APPLICATIONS : Applications must be submitted through the Department's
+electronic recruitment system.
+CLOSING DATE : 10 July 2026
+
+POST 22/80 : DEPUTY DIRECTOR: EVALUATION (REF NO: DHET/01/2026)
+SALARY : R1 101 468 per annum
+CENTRE : Pretoria
+REQUIREMENTS : A relevant degree and five years of evaluation experience.
+DUTIES : Coordinate programme evaluations and prepare management reports.
+"""
+
+        job = parse_jobs(text, "https://www.dpsa.gov.za/circular-22.pdf")[0]
+
+        self.assertEqual(job["application"]["method"], "governmentWebsite")
+        self.assertEqual(
+            job["application"]["applicationUrl"],
+            "https://z83.ngnscan.co.za/login",
+        )
+
     @patch("import_dpsa_vacancies.fetch_url")
     def test_latest_circular_prefers_newest_year_before_number(self, fetch_url):
         fetch_url.return_value = b"""
