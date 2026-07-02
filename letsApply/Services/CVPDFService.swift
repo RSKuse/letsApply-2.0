@@ -132,9 +132,7 @@ private final class CoverLetterPDFWriter {
 
     func render() {
         context.beginPage()
-
-        brandColor.setFill()
-        context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: pageBounds.height))
+        drawPageAccent()
 
         draw(
             profile.name.uppercased(),
@@ -180,39 +178,111 @@ private final class CoverLetterPDFWriter {
             lineHeight: 16
         )
 
+        let reference = job.application.referenceNumber
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let referenceText = reference.isEmpty ? "" : " (REF: \(reference))"
         draw(
-            "RE: APPLICATION FOR \(job.title.uppercased())",
+            "RE: APPLICATION FOR \(job.title.uppercased())\(referenceText)",
             frame: CGRect(x: margin, y: 172, width: pageBounds.width - (margin * 2), height: 34),
             font: UIFont.systemFont(ofSize: 12, weight: .bold),
             color: brandColor,
             lineHeight: 17
         )
 
+        drawBody(startingAt: 214)
+    }
+
+    private func drawBody(startingAt startingY: CGFloat) {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 2
-        paragraphStyle.paragraphSpacing = 9
         paragraphStyle.lineBreakMode = .byWordWrapping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: inkColor,
+            .paragraphStyle: paragraphStyle
+        ]
+        let bodyText = text
+            .components(separatedBy: .newlines)
+            .filter {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                    .hasPrefix("APPLICATION FOR THE POSITION OF")
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let paragraphs = bodyText
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
 
-        let body = NSAttributedString(
-            string: text.trimmingCharacters(in: .whitespacesAndNewlines),
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: inkColor,
-                .paragraphStyle: paragraphStyle
-            ]
+        let bodyWidth = pageBounds.width - (margin * 2)
+        let pageBottom: CGFloat = 744
+        var currentY = startingY
+
+        for paragraph in paragraphs {
+            let attributedParagraph = NSAttributedString(
+                string: paragraph,
+                attributes: attributes
+            )
+            let requiredHeight = ceil(
+                attributedParagraph.boundingRect(
+                    with: CGSize(width: bodyWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).height
+            )
+
+            if currentY + requiredHeight > pageBottom {
+                drawFooter()
+                context.beginPage()
+                drawPageAccent()
+                drawContinuationHeader()
+                currentY = 92
+            }
+
+            attributedParagraph.draw(
+                with: CGRect(
+                    x: margin,
+                    y: currentY,
+                    width: bodyWidth,
+                    height: requiredHeight + 2
+                ),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                context: nil
+            )
+            currentY += requiredHeight + 11
+        }
+
+        drawFooter()
+    }
+
+    private func drawPageAccent() {
+        brandColor.setFill()
+        context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: pageBounds.height))
+    }
+
+    private func drawContinuationHeader() {
+        draw(
+            profile.name.uppercased(),
+            frame: CGRect(x: margin, y: 34, width: pageBounds.width - (margin * 2), height: 26),
+            font: UIFont.systemFont(ofSize: 15, weight: .bold),
+            color: inkColor,
+            lineHeight: 20
         )
-
-        body.draw(
-            with: CGRect(
-                x: margin,
-                y: 214,
-                width: pageBounds.width - (margin * 2),
-                height: 526
-            ),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
+        draw(
+            "\(job.title) - continued",
+            frame: CGRect(x: margin, y: 60, width: pageBounds.width - (margin * 2), height: 18),
+            font: UIFont.systemFont(ofSize: 9.5, weight: .medium),
+            color: secondaryColor,
+            lineHeight: 13
         )
+        brandColor.setFill()
+        context.cgContext.fill(
+            CGRect(x: margin, y: 82, width: pageBounds.width - (margin * 2), height: 1.5)
+        )
+    }
 
+    private func drawFooter() {
         draw(
             "Prepared locally with Let’s Apply",
             frame: CGRect(x: margin, y: 758, width: 260, height: 14),

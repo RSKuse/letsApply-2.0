@@ -42,6 +42,10 @@ class AdminJobEditorViewController: UIViewController {
 
     private lazy var titleTextField = makeTextField(placeholder: "e.g. Risk Analyst")
     private lazy var companyTextField = makeTextField(placeholder: "Employer name")
+    private lazy var companyLogoURLTextField = makeTextField(
+        placeholder: "https://company.com/logo.png",
+        keyboardType: .URL
+    )
     private lazy var categoryTextField = makeTextField(placeholder: "e.g. Finance")
     private lazy var jobTypeTextField = makeTextField(placeholder: "e.g. Permanent")
     private lazy var cityTextField = makeTextField(placeholder: "City")
@@ -172,6 +176,11 @@ class AdminJobEditorViewController: UIViewController {
         let content = makeVerticalStack([
             makeFieldGroup(title: "Job Title", field: titleTextField),
             makeFieldGroup(title: "Company", field: companyTextField),
+            makeFieldGroup(
+                title: "Company Logo URL",
+                subtitle: "Optional HTTPS image supplied by the employer or source",
+                field: companyLogoURLTextField
+            ),
             makeFieldGroup(title: "Category", field: categoryTextField),
             makeFieldGroup(title: "Job Type", field: jobTypeTextField),
             makeFieldGroup(title: "City", field: cityTextField),
@@ -446,6 +455,7 @@ class AdminJobEditorViewController: UIViewController {
 
         titleTextField.text = job.title
         companyTextField.text = job.companyName
+        companyLogoURLTextField.text = job.companyLogoURL
         categoryTextField.text = job.jobCategory
         jobTypeTextField.text = job.jobType
         cityTextField.text = job.location.city
@@ -621,6 +631,7 @@ class AdminJobEditorViewController: UIViewController {
             title: title,
             companyName: company,
             companyImageName: existingJob?.companyImageName,
+            companyLogoURL: clean(companyLogoURLTextField.text),
             location: Location(
                 city: clean(cityTextField.text),
                 region: clean(regionTextField.text),
@@ -738,6 +749,13 @@ class AdminJobEditorViewController: UIViewController {
         let sourceURL = clean(sourceURLTextField.text)
         if !sourceURL.isEmpty, !isValidWebURL(sourceURL) {
             return "The original source URL must begin with http:// or https://."
+        }
+
+        let companyLogoURL = clean(companyLogoURLTextField.text)
+        if !companyLogoURL.isEmpty,
+           (!isValidWebURL(companyLogoURL)
+            || !companyLogoURL.lowercased().hasPrefix("https://")) {
+            return "The company logo must use a valid https:// image URL."
         }
 
         return nil

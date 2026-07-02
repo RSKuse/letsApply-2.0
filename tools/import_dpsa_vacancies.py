@@ -39,6 +39,23 @@ FIELD_LABELS = (
     "APPLICATION",
     "NOTE",
 )
+ANNEXURE_PATTERN = re.compile(r"(?m)^ANNEXURE\s+[A-Z0-9]+\s*$")
+NUMBER_WORDS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "fifteen": 15,
+}
 
 
 def fetch_url(url: str) -> bytes:
@@ -55,12 +72,17 @@ def discover_latest_pdf() -> str:
     candidates = []
     for raw_url in OFFICIAL_PDF_PATTERN.findall(page):
         url = urllib.parse.urljoin(DPSA_NEWSROOM_URL, html.unescape(raw_url))
-        match = re.search(r"CIRCULAR(?:%20|\s)*0*(\d+)", url, re.IGNORECASE)
+        decoded_url = urllib.parse.unquote(url)
+        match = re.search(
+            r"CIRCULAR\s*0*(\d+)\s*of\s*(\d{4})",
+            decoded_url,
+            re.IGNORECASE,
+        )
         if match:
-            candidates.append((int(match.group(1)), url))
+            candidates.append((int(match.group(2)), int(match.group(1)), url))
 
     if candidates:
-        return max(candidates, key=lambda value: value[0])[1]
+        return max(candidates, key=lambda value: (value[0], value[1]))[2]
 
     circular_pages = []
     for raw_url, number, year in CIRCULAR_PAGE_PATTERN.findall(page):
@@ -95,8 +117,63 @@ def extract_pdf_text(pdf_path: Path) -> str:
     pages = []
     for page in reader.pages:
         value = page.extract_text() or ""
+        value = inject_click_here_links(value, external_page_links(page))
         pages.append(normalize_text(value))
     return "\n".join(pages)
+
+
+def external_page_links(page) -> list[str]:
+    annotations_value = page.get("/Annots")
+    if annotations_value is None:
+        return []
+
+    annotations = (
+        annotations_value.get_object()
+        if hasattr(annotations_value, "get_object")
+        else annotations_value
+    )
+    links = []
+    for reference in annotations or []:
+        annotation = reference.get_object()
+        if annotation.get("/Subtype") != "/Link":
+            continue
+
+        action_value = annotation.get("/A")
+        action = (
+            action_value.get_object()
+            if hasattr(action_value, "get_object")
+            else (action_value or {})
+        )
+        uri = str(action.get("/URI") or "").strip()
+        if not uri.lower().startswith(("http://", "https://")):
+            continue
+
+        rect = annotation.get("/Rect") or [0, 0, 0, 0]
+        coordinates = [float(value) for value in rect]
+        top = max(coordinates[1], coordinates[3]) if len(coordinates) >= 4 else 0
+        left = min(coordinates[0], coordinates[2]) if len(coordinates) >= 4 else 0
+        links.append((top, left, uri))
+
+    links.sort(key=lambda value: (-value[0], value[1]))
+    return [value[2] for value in links]
+
+
+def inject_click_here_links(value: str, links: list[str]) -> str:
+    link_iterator = iter(links)
+
+    def replacement(match: re.Match) -> str:
+        try:
+            link = next(link_iterator)
+        except StopIteration:
+            return match.group(0)
+        return f"{match.group(0)} {link}"
+
+    return re.sub(
+        r"\bCLICK\s+HERE\b",
+        replacement,
+        value,
+        flags=re.IGNORECASE,
+    )
 
 
 def normalize_text(value: str) -> str:
@@ -135,19 +212,40 @@ def nearby_value(text: str, position: int, label: str, lookback: int = 14000) ->
     return clean_inline(matches[-1].group(1)) if matches else ""
 
 
+def annexure_start(text: str, position: int) -> int:
+    matches = list(ANNEXURE_PATTERN.finditer(text[:position]))
+    return matches[-1].start() if matches else max(0, position - 180000)
+
+
+def section_value(text: str, position: int, label: str) -> str:
+    section = text[annexure_start(text, position):position]
+    labels = "|".join(re.escape(item) for item in FIELD_LABELS + ("CLOSING DATE", "FOR ATTENTION"))
+    pattern = re.compile(
+        rf"(?ms)^{re.escape(label)}\s*:\s*(.*?)(?=^(?:{labels})\s*:|^POST\s+\d|\Z)"
+    )
+    matches = list(pattern.finditer(section))
+    return clean_inline(matches[-1].group(1)) if matches else ""
+
+
 def department_before(text: str, position: int) -> str:
-    preceding = text[max(0, position - 180000):position]
+    preceding = text[annexure_start(text, position):position]
     patterns = [
-        re.compile(r"(?m)^DEPARTMENT OF [A-Z][A-Z0-9 &,'()/-]+$"),
-        re.compile(r"(?m)^[A-Z][A-Z0-9 &,'()/-]+ DEPARTMENT$"),
-        re.compile(r"(?m)^PROVINCIAL ADMINISTRATION:\s*([A-Z][A-Z ]+)$"),
+        re.compile(r"(?m)^(?:THE )?DEPARTMENT OF[,]? [A-Z][A-Z0-9 &,'()/-]+[ \t]*$"),
+        re.compile(r"(?m)^[A-Z][A-Z0-9 &,'()/-]+ DEPARTMENT[ \t]*$"),
+        re.compile(r"(?m)^PROVINCIAL ADMINISTRATION:\s*([A-Z][A-Z ]+)[ \t]*$"),
+        re.compile(r"(?m)^OFFICE OF THE [A-Z][A-Z0-9 &,'()/-]+[ \t]*$"),
+        re.compile(r"(?m)^GOVERNMENT COMMUNICATIONS AND INFORMATION SYSTEM[ \t]*$"),
+        re.compile(r"(?m)^SOUTH AFRICAN POLICE SERVICE[ \t]*$"),
+        re.compile(r"(?m)^THE PRESIDENCY[ \t]*$"),
     ]
     candidates = []
     for pattern in patterns:
         candidates.extend((match.start(), clean_inline(match.group(0))) for match in pattern.finditer(preceding))
     if not candidates:
         return "South African Public Service"
-    return max(candidates, key=lambda item: item[0])[1].title()
+    department = max(candidates, key=lambda item: item[0])[1]
+    department = re.sub(r"^DEPARTMENT OF,\s*", "DEPARTMENT OF ", department)
+    return department.title()
 
 
 def parse_salary(value: str) -> tuple[int, int, str, str]:
@@ -194,8 +292,55 @@ def first_email(value: str) -> str:
 
 
 def first_url(value: str) -> str:
-    match = re.search(r"https?://[^\s)>]+", value)
-    return match.group(0).rstrip(".,;") if match else ""
+    match = re.search(r"(?:https?://|www\.)[^\s)>]+", value, re.IGNORECASE)
+    if not match:
+        return ""
+    url = match.group(0).rstrip(".,;")
+    return url if url.lower().startswith("http") else f"https://{url}"
+
+
+def parse_experience(value: str) -> tuple[int, int]:
+    if not value:
+        return 0, 0
+
+    chunks = re.split(r"(?<=[.;])\s+|\n+", clean_inline(value))
+    candidates = []
+    number_words = "|".join(NUMBER_WORDS)
+    for chunk in chunks:
+        lowered = chunk.lower().replace("’", "'")
+        if "experience" not in lowered:
+            continue
+
+        parenthesized = re.search(
+            rf"\b(?:{number_words})\s*\((\d+)\)\s*years?",
+            lowered,
+        )
+        numeric = re.search(r"\b(\d{1,2})\s*years?", lowered)
+        written = re.search(rf"\b({number_words})\s+years?", lowered)
+
+        if parenthesized:
+            candidates.append(int(parenthesized.group(1)))
+        elif numeric:
+            candidates.append(int(numeric.group(1)))
+        elif written:
+            candidates.append(NUMBER_WORDS[written.group(1)])
+
+    if not candidates:
+        return 0, 0
+    required = candidates[0]
+    return required, required
+
+
+def experience_details(value: str) -> str:
+    chunks = re.split(r"(?<=[.;])\s+|\n+", clean_inline(value))
+    matches = [
+        clean_inline(chunk)
+        for chunk in chunks
+        if "experience" in chunk.lower() and len(clean_inline(chunk)) > 2
+    ]
+    if not matches:
+        return ""
+    return ". ".join(matches[:3]).rstrip(".") + "."
 
 
 def first_date(value: str) -> str:
@@ -212,12 +357,22 @@ def first_date(value: str) -> str:
         return match.group(1)
 
 
-def application_method(application_text: str, requires_z83: bool) -> str:
+def known_department_portal(department: str) -> str:
+    normalized = department.lower()
+    if "higher education" in normalized:
+        return "https://z83.ngnscan.co.za/login"
+    return ""
+
+
+def application_method(
+    application_text: str,
+    requires_z83: bool,
+    application_url: str = "",
+) -> str:
     email = first_email(application_text)
-    url = first_url(application_text)
     if email:
         return "governmentEmail" if requires_z83 else "email"
-    if url:
+    if application_url or first_url(application_text):
         return "governmentWebsite" if requires_z83 else "externalWebsite"
     return "governmentManual" if requires_z83 else "manualInstruction"
 
@@ -233,7 +388,9 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
     imported_at = datetime.now(timezone.utc).isoformat()
 
     for index, match in enumerate(matches):
-        segment_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        next_post_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        next_annexure = ANNEXURE_PATTERN.search(text, match.end(), next_post_start)
+        segment_end = next_annexure.start() if next_annexure else next_post_start
         segment = text[match.start():segment_end]
         post_number = match.group(1)
         raw_title = match.group(2)
@@ -249,20 +406,33 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
         application_text = (
             find_field(segment, "APPLICATIONS")
             or find_field(segment, "APPLICATION")
-            or nearby_value(text, match.start(), "APPLICATIONS")
-            or nearby_value(text, match.start(), "APPLICATION")
+            or section_value(text, match.start(), "APPLICATIONS")
+            or section_value(text, match.start(), "APPLICATION")
         )
-        closing_text = nearby_value(text, match.start(), "CLOSING DATE")
+        closing_text = section_value(text, match.start(), "CLOSING DATE")
         closing_date = first_date(closing_text)
         minimum, maximum, currency, period = parse_salary(salary_text)
+        minimum_years, preferred_years = parse_experience(requirements_text)
 
         combined_instructions = f"{application_text} {requirements_text}".lower()
         requires_z83 = True
         requires_certified = "certified" in combined_instructions
         requires_license = "driver" in requirements_text.lower() and "licence" in requirements_text.lower()
         application_email = first_email(application_text)
-        application_url = first_url(application_text)
-        method = application_method(application_text, requires_z83)
+        application_url = (
+            first_url(application_text)
+            or known_department_portal(department)
+        )
+        unresolved_click_link = (
+            "click here" in application_text.lower()
+            and not application_email
+            and not application_url
+        )
+        method = application_method(
+            application_text,
+            requires_z83,
+            application_url,
+        )
 
         jobs.append(
             {
@@ -270,6 +440,7 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "title": title,
                 "companyName": department,
                 "companyImageName": "",
+                "companyLogoURL": "",
                 "location": {
                     "city": centre,
                     "region": "",
@@ -282,9 +453,9 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "responsibilities": split_sentences(duties_text, maximum=12),
                 "requirements": split_sentences(requirements_text, maximum=12),
                 "experience": {
-                    "minYears": 0,
-                    "preferredYears": 0,
-                    "details": requirements_text,
+                    "minYears": minimum_years,
+                    "preferredYears": preferred_years,
+                    "details": experience_details(requirements_text),
                 },
                 "compensation": {
                     "salaryRange": {
@@ -325,7 +496,7 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "sourceJobId": reference,
                 "sourceType": "government",
                 "dateImported": imported_at,
-                "verified": True,
+                "verified": not unresolved_click_link,
                 "publicationStatus": "published",
             }
         )
@@ -348,6 +519,7 @@ def publish_jobs(jobs: list[dict]) -> None:
     if not firebase_admin._apps:
         firebase_admin.initialize_app(credentials.Certificate(credential_data))
     database = firestore.client()
+    imported_ids = {job["id"] for job in jobs}
 
     for start in range(0, len(jobs), 400):
         batch = database.batch()
@@ -356,6 +528,29 @@ def publish_jobs(jobs: list[dict]) -> None:
             payload = dict(job)
             payload.pop("id", None)
             batch.set(document, payload, merge=True)
+        batch.commit()
+
+    existing = database.collection("jobs").where(
+        "sourceName",
+        "==",
+        "DPSA Public Service Vacancy Circular",
+    ).stream()
+    stale_documents = [
+        document.reference
+        for document in existing
+        if document.id not in imported_ids
+    ]
+    expired_at = datetime.now(timezone.utc).isoformat()
+    for start in range(0, len(stale_documents), 400):
+        batch = database.batch()
+        for document in stale_documents[start:start + 400]:
+            batch.update(
+                document,
+                {
+                    "publicationStatus": "expired",
+                    "expiredAt": expired_at,
+                },
+            )
         batch.commit()
 
 

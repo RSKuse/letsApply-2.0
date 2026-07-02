@@ -94,9 +94,8 @@ class AdvertCell: UICollectionViewCell {
         return label
     }()
 
-    private lazy var interactionLabel: UILabel = {
+    private lazy var pulseLabel: UILabel = {
         let label = UILabel()
-        label.text = "SWIPE OR TAP FOR THE NEXT INSIGHT"
         label.font = UIFont.systemFont(ofSize: 9, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -118,7 +117,7 @@ class AdvertCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(with insight: CareerInsight) {
+    func configure(with insight: CareerInsight, position: Int, total: Int) {
         bannerView.backgroundColor = insight.style.backgroundColor
         eyebrowLabel.text = insight.category.uppercased()
         eyebrowLabel.textColor = insight.style.accentColor
@@ -126,9 +125,15 @@ class AdvertCell: UICollectionViewCell {
         titleLabel.textColor = insight.style.primaryTextColor
         subtitleLabel.text = insight.detail
         subtitleLabel.textColor = insight.style.secondaryTextColor
-        interactionLabel.textColor = insight.style.secondaryTextColor
+        pulseLabel.text = String(
+            format: "CAREER PULSE  %02d / %02d",
+            position,
+            total
+        )
+        pulseLabel.textColor = insight.style.secondaryTextColor
         signalIconView.image = UIImage(systemName: insight.systemImageName)
         signalIconView.tintColor = insight.style.accentColor
+        accessibilityLabel = "\(insight.category). \(insight.title). \(insight.detail)"
     }
 
     private func setupUI() {
@@ -136,7 +141,7 @@ class AdvertCell: UICollectionViewCell {
         bannerView.addSubview(eyebrowLabel)
         bannerView.addSubview(titleLabel)
         bannerView.addSubview(subtitleLabel)
-        bannerView.addSubview(interactionLabel)
+        bannerView.addSubview(pulseLabel)
         bannerView.addSubview(signalIconView)
 
         NSLayoutConstraint.activate([
@@ -162,9 +167,9 @@ class AdvertCell: UICollectionViewCell {
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: bannerView.trailingAnchor, constant: -18),
 
-            interactionLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            interactionLabel.trailingAnchor.constraint(equalTo: subtitleLabel.trailingAnchor),
-            interactionLabel.bottomAnchor.constraint(equalTo: bannerView.bottomAnchor, constant: -14)
+            pulseLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            pulseLabel.trailingAnchor.constraint(equalTo: subtitleLabel.trailingAnchor),
+            pulseLabel.bottomAnchor.constraint(equalTo: bannerView.bottomAnchor, constant: -14)
         ])
     }
 }

@@ -18,10 +18,13 @@ Let's Apply prepares the strongest application package it can, but the user alwa
    - Import or curate vacancies from the official [DPSA Public Service Vacancy Circular](https://www.dpsa.gov.za/newsroom/psvc/).
    - The circular is normally published weekly and provides the official Z83 form and department-specific application instructions.
    - Preserve the vacancy reference number, closing date, destination, required forms, and supporting-document instructions.
+   - The `Import DPSA vacancies` GitHub Action checks on Friday evening and retries on Saturday morning. Stable vacancy IDs prevent duplicates, while closing dates automatically hide expired posts.
 
 4. **Employer applicant-tracking systems**
    - Use approved public or partner feeds such as the [Greenhouse Job Board API](https://developer.greenhouse.io/job-board.html) and [Lever Postings API](https://github.com/lever/postings-api).
    - Prefer each provider’s hosted application form unless Let’s Apply has permission and secure server-side credentials for direct submission.
+   - The `Import partner vacancies` GitHub Action checks configured Greenhouse and Lever feeds daily.
+   - ReliefWeb can be enabled after Let’s Apply receives an approved API app name.
 
 5. **Licensed job-data partners**
    - Evaluate commercial providers such as the [Adzuna API](https://developer.adzuna.com/) when the product can support licensing and usage costs.
@@ -38,6 +41,7 @@ Each job should include:
 - `sourceType`
 - `dateImported`
 - `verified`
+- `companyLogoURL`
 - `application.method`
 - `application.applicationEmail`
 - `application.applicationUrl`
@@ -55,6 +59,8 @@ Each job should include:
 - `compensation.salaryRange.period`
 
 Use `sourceType + sourceJobId` to prevent duplicate imported vacancies.
+Only use an HTTPS logo URL supplied by the employer or an approved source. The
+app keeps its branded briefcase fallback when a trustworthy logo is unavailable.
 
 ## Application Routing
 

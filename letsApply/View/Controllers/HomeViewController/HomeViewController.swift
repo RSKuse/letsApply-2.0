@@ -4,15 +4,21 @@
 //
 
 import UIKit
+import FirebaseAuth
 
 class HomeViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
 
     private let firestoreService = FirestoreService()
+    private let recommendationService = JobRecommendationService()
     private var featuredJobs: [Job] = []
     private var pickedForYouJobs: [Job] = []
     private let advertHeaderView = AdvertContainerView()
-    private let sections = ["Featured", "Picked For You"]
+    private var recommendationTitle = "Latest Opportunities"
     private var lastHeaderWidth: CGFloat = 0
+
+    private var sections: [String] {
+        return ["Featured", recommendationTitle]
+    }
 
     private lazy var refreshControl: UIRefreshControl = {
         let control = UIRefreshControl()
@@ -130,16 +136,57 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
 
             let featured = jobs.filter { $0.isFeatured }
             let regular = jobs.filter { !$0.isFeatured }
+            let featuredJobs = featured.isEmpty ? Array(jobs.prefix(5)) : featured
+            let candidateJobs = regular.isEmpty ? jobs : regular
 
-            self.featuredJobs = featured.isEmpty ? Array(jobs.prefix(5)) : featured
-            self.pickedForYouJobs = regular.isEmpty ? jobs : regular
-
-            DispatchQueue.main.async {
-                self.refreshControl.endRefreshing()
-                self.emptyStateView.isHidden = !jobs.isEmpty
-                self.jobTableView.backgroundView = jobs.isEmpty ? self.emptyStateView : nil
-                self.jobTableView.reloadData()
+            guard let user = Auth.auth().currentUser, !user.isAnonymous else {
+                self.display(
+                    featuredJobs: featuredJobs,
+                    recommendationJobs: candidateJobs,
+                    title: "Latest Opportunities"
+                )
+                return
             }
+
+            self.firestoreService.fetchUserProfile(uid: user.uid) { [weak self] result in
+                guard let self = self else { return }
+
+                switch result {
+                case .success(let profile):
+                    self.display(
+                        featuredJobs: featuredJobs,
+                        recommendationJobs: self.recommendationService.rank(
+                            jobs: candidateJobs,
+                            for: profile
+                        ),
+                        title: "Recommended For You"
+                    )
+                case .failure:
+                    self.display(
+                        featuredJobs: featuredJobs,
+                        recommendationJobs: candidateJobs,
+                        title: "Latest Opportunities"
+                    )
+                }
+            }
+        }
+    }
+
+    private func display(
+        featuredJobs: [Job],
+        recommendationJobs: [Job],
+        title: String
+    ) {
+        DispatchQueue.main.async {
+            self.featuredJobs = featuredJobs
+            self.pickedForYouJobs = recommendationJobs
+            self.recommendationTitle = title
+            self.refreshControl.endRefreshing()
+
+            let hasJobs = !featuredJobs.isEmpty || !recommendationJobs.isEmpty
+            self.emptyStateView.isHidden = hasJobs
+            self.jobTableView.backgroundView = hasJobs ? nil : self.emptyStateView
+            self.jobTableView.reloadData()
         }
     }
 
@@ -206,7 +253,7 @@ class HomeViewController: UIViewController, UITableViewDelegate, UITableViewData
 
     @objc private func seeAllButtonTapped(sender: UIButton) {
         let jobsToShow = sender.tag == 0 ? featuredJobs : pickedForYouJobs
-        let navigationTitle = sender.tag == 0 ? "Featured Jobs" : "Picked For You"
+        let navigationTitle = sender.tag == 0 ? "Featured Jobs" : recommendationTitle
         let jobsVC = JobsCollectionViewController(jobs: jobsToShow, navigationTitle: navigationTitle)
         jobsVC.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(jobsVC, animated: true)

@@ -1,0 +1,15 @@
+{
+  "images" : [
+    {
+      "filename" : "south_africa_coat_of_arms.svg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "properties" : {
+    "preserves-vector-representation" : true
+  }
+}

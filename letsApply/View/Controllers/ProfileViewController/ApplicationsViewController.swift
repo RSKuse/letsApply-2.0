@@ -46,12 +46,14 @@ class ApplicationsViewController: UIViewController {
         super.viewDidLoad()
         title = "Applications"
         view.backgroundColor = AppTheme.background
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let refreshButton = UIBarButtonItem(
             image: UIImage(systemName: "arrow.clockwise"),
             style: .plain,
             target: self,
             action: #selector(refreshTapped)
         )
+        refreshButton.accessibilityLabel = "Refresh applications"
+        navigationItem.rightBarButtonItems = [refreshButton, editButtonItem]
         setupUI()
         fetchApplications()
     }
@@ -81,7 +83,7 @@ class ApplicationsViewController: UIViewController {
                 switch result {
                 case .success(let applications):
                     self.applications = applications
-                    self.emptyLabel.isHidden = !applications.isEmpty
+                    self.updateEmptyState()
                     self.tableView.reloadData()
                 case .failure(let error):
                     self.showAlert(title: "Load Failed", message: error.localizedDescription)
@@ -92,6 +94,58 @@ class ApplicationsViewController: UIViewController {
 
     @objc private func refreshTapped() {
         fetchApplications()
+    }
+
+    private func updateEmptyState() {
+        emptyLabel.isHidden = !applications.isEmpty
+        tableView.isHidden = applications.isEmpty
+        if applications.isEmpty {
+            setEditing(false, animated: true)
+        }
+    }
+
+    private func confirmDeleteApplication(at indexPath: IndexPath) {
+        guard applications.indices.contains(indexPath.row) else { return }
+        let application = applications[indexPath.row]
+        let alert = UIAlertController(
+            title: "Remove Application?",
+            message: "This removes \(application.jobTitle) from your tracker. It does not withdraw an application already sent to an employer.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Remove", style: .destructive) { [weak self] _ in
+            self?.deleteApplication(application, at: indexPath)
+        })
+        present(alert, animated: true)
+    }
+
+    private func deleteApplication(_ application: Application, at indexPath: IndexPath) {
+        firestoreService.deleteApplication(
+            applicationId: application.id,
+            userId: userId
+        ) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let error {
+                    self.showAlert(title: "Delete Failed", message: error.localizedDescription)
+                    return
+                }
+
+                guard let currentIndex = self.applications.firstIndex(where: {
+                    $0.id == application.id
+                }) else {
+                    self.fetchApplications()
+                    return
+                }
+
+                self.applications.remove(at: currentIndex)
+                self.tableView.deleteRows(
+                    at: [IndexPath(row: currentIndex, section: 0)],
+                    with: .automatic
+                )
+                self.updateEmptyState()
+            }
+        }
     }
 
     private func showAlert(title: String, message: String) {
@@ -133,5 +187,31 @@ extension ApplicationsViewController: UITableViewDataSource, UITableViewDelegate
                 }
             }
         }
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        let deleteAction = UIContextualAction(
+            style: .destructive,
+            title: "Delete"
+        ) { [weak self] _, _, completion in
+            self?.confirmDeleteApplication(at: indexPath)
+            completion(true)
+        }
+        deleteAction.image = UIImage(systemName: "trash")
+        let configuration = UISwipeActionsConfiguration(actions: [deleteAction])
+        configuration.performsFirstActionWithFullSwipe = false
+        return configuration
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        commit editingStyle: UITableViewCell.EditingStyle,
+        forRowAt indexPath: IndexPath
+    ) {
+        guard editingStyle == .delete else { return }
+        confirmDeleteApplication(at: indexPath)
     }
 }

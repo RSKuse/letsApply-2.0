@@ -55,16 +55,10 @@ class JobTableViewCell: UITableViewCell {
         return label
     }()
 
-    private lazy var jobIconView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.backgroundColor = AppTheme.mutedSurface
-        imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = AppTheme.cardRadius
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+    private lazy var jobIconView: CompanyLogoView = {
+        let view = CompanyLogoView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -74,6 +68,11 @@ class JobTableViewCell: UITableViewCell {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        jobIconView.reset()
     }
 
     private func setupUI() {
@@ -118,6 +117,7 @@ class JobTableViewCell: UITableViewCell {
     }
 
     func configure(with job: Job) {
+        jobIconView.configure(with: job)
         jobTitleLabel.text = job.title
         companyLabel.text = job.companyName
         detailLabel.text = "\(job.location.city)  |  \(job.jobType)"

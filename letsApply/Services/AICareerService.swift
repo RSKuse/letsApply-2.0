@@ -191,102 +191,101 @@ class AICareerService {
         cvText: String?
     ) -> String {
         let priorities = jobPriorityPhrases(for: job)
-        let priorityText = naturalList(Array(priorities.prefix(2)))
         let strengths = relevantStrengths(for: userProfile, job: job)
+        let priorityText = naturalList(Array(priorities.prefix(2)))
         let strengthText = naturalList(strengths)
+        let reference = cleanInline(job.application.referenceNumber)
+        let subjectReference = reference.isEmpty ? "" : " (REFERENCE: \(reference))"
+        let salutation = job.requiresGovernmentFlow
+            ? "Dear Selection Committee,"
+            : "Dear Hiring Manager,"
+        let subject = "APPLICATION FOR THE POSITION OF \(job.title.uppercased())\(subjectReference)"
 
-        var opening = "I am applying for the \(job.title) position at \(job.companyName)."
-        if !priorityText.isEmpty {
-            opening += " The opportunity stands out to me because the role centres on \(priorityText)."
-        }
+        var opening = "I wish to apply for the \(job.title) position at \(job.companyName)."
         if !strengthText.isEmpty {
-            opening += " My background has developed \(strengthText), which I would bring to the position with care and accountability."
+            opening += " Across my professional experience, I have developed \(strengthText), which align closely with the capabilities this appointment requires."
+        } else {
+            opening += " My professional experience has prepared me to approach this opportunity with sound judgement, accountability, and careful attention to the quality of my work."
         }
 
-        let experienceParagraph = experienceEvidence(
+        var motivation = ""
+        if !priorityText.isEmpty {
+            motivation = "What interests me most about this opportunity is its focus on \(priorityText). These responsibilities call for someone who can connect analysis with practical delivery, work constructively with stakeholders, and maintain a clear line of accountability from planning through to reporting."
+        }
+
+        let experienceParagraphs = relevantExperienceParagraphs(
             for: userProfile,
             strengths: strengths,
             job: job
         )
+        let educationParagraph = educationEvidence(for: userProfile, job: job)
 
-        let educationParagraph = educationEvidence(
-            for: userProfile,
-            job: job
-        )
-
-        let contribution: String
-        if let priority = priorities.first {
-            contribution = "I would welcome the opportunity to contribute to \(embeddedPhrase(priority)) at \(job.companyName), while learning the organisation’s systems and service standards quickly."
-        } else if !strengthText.isEmpty {
-            contribution = "I would welcome the opportunity to bring \(strengthText) to \(job.companyName) and contribute reliably from the outset."
+        let closing: String
+        if let priority = priorities.first, !priority.isEmpty {
+            closing = "I would value the opportunity to contribute to \(job.companyName) and support its work in \(embeddedPhrase(priority)). I am confident that my experience, considered approach, and commitment to high professional standards would enable me to make a meaningful contribution in the \(job.title) role. Thank you for considering my application. I would welcome the opportunity to discuss my suitability with the selection panel."
         } else {
-            contribution = "I would welcome the opportunity to contribute to \(job.companyName) and discuss how my experience could support the \(job.title) role."
+            closing = "I would value the opportunity to contribute to \(job.companyName) as \(job.title). Thank you for considering my application. I would welcome the opportunity to discuss how my experience and approach could support the organisation’s priorities."
         }
 
-        return [
-            "Dear Hiring Manager,",
-            cleanParagraph(opening),
-            cleanParagraph(experienceParagraph),
-            cleanParagraph(educationParagraph),
-            "\(cleanParagraph(contribution)) Thank you for considering my application.",
-            "Kind regards,\n\(userProfile.name)"
-        ]
+        return (
+            [salutation, subject, opening, motivation]
+            + experienceParagraphs
+            + [educationParagraph, closing, "Yours faithfully,\n\(userProfile.name)"]
+        )
         .filter { !$0.isEmpty }
+        .map(cleanParagraphPreservingLineBreaks)
         .joined(separator: "\n\n")
     }
 
-    private func experienceEvidence(
+    private func relevantExperienceParagraphs(
         for profile: UserProfile,
         strengths: [String],
         job: Job
-    ) -> String {
-        if let experience = bestExperience(for: profile, job: job) {
+    ) -> [String] {
+        let jobTokens = Set(meaningfulTokens(from: jobEvidenceText(for: job)))
+        let rankedExperiences = profile.resolvedWorkExperiences
+            .enumerated()
+            .sorted { left, right in
+                let leftScore = experienceScore(left.element, jobTokens: jobTokens)
+                let rightScore = experienceScore(right.element, jobTokens: jobTokens)
+                return leftScore == rightScore
+                    ? left.offset < right.offset
+                    : leftScore > rightScore
+            }
+            .map { $0.element }
+
+        let paragraphs = rankedExperiences.prefix(2).compactMap { experience -> String? in
             let role = cleanInline(experience.jobTitle)
             let company = cleanInline(experience.company)
             let roleContext = [role, company]
                 .filter { !$0.isEmpty }
                 .joined(separator: " at ")
+            guard !roleContext.isEmpty else { return nil }
+
             let responsibilities = bestResponsibilities(
                 from: experience,
                 for: job
             )
-            let strengthText = naturalList(strengths)
 
-            if !roleContext.isEmpty, !responsibilities.isEmpty {
-                var paragraph = "In my role as \(roleContext), \(responsibilities.joined(separator: " "))"
-                if !strengthText.isEmpty {
-                    paragraph += " This work required \(strengthText) and consistent accountability for the quality of each outcome."
-                } else {
-                    paragraph += " This work required careful planning, dependable follow-through, and consistent accountability for each outcome."
-                }
-                return paragraph
+            if responsibilities.isEmpty {
+                return "My experience as \(roleContext) has strengthened my professional judgement, my ability to work responsibly with others, and my accountability for delivering work to a high standard."
             }
 
-            if !roleContext.isEmpty {
-                let capabilityText = strengthText.isEmpty
-                    ? "practical judgement, dependable follow-through, and accountability"
-                    : strengthText
-                return "My experience as \(roleContext) has developed \(capabilityText), which I would apply thoughtfully in the \(job.title) position."
+            var paragraph = "As \(roleContext), \(lowercasedFirstPersonSentence(responsibilities[0]))"
+            if responsibilities.count > 1 {
+                paragraph += " \(responsibilities[1])"
             }
+            return paragraph
+        }
+
+        if !paragraphs.isEmpty {
+            return paragraphs
         }
 
         let strengthText = naturalList(strengths)
-        if !strengthText.isEmpty {
-            return "Across my professional experience, I have developed \(strengthText). These capabilities would help me approach the \(job.title) role with sound judgement and reliable follow-through."
-        }
-
-        return "My professional experience has taught me to learn new responsibilities quickly, work carefully with others, and remain accountable for the standard of my work."
-    }
-
-    private func bestExperience(
-        for profile: UserProfile,
-        job: Job
-    ) -> CVWorkExperience? {
-        let jobTokens = Set(meaningfulTokens(from: jobEvidenceText(for: job)))
-        return profile.resolvedWorkExperiences.max { left, right in
-            experienceScore(left, jobTokens: jobTokens)
-                < experienceScore(right, jobTokens: jobTokens)
-        }
+        return strengthText.isEmpty
+            ? []
+            : ["My professional experience has developed \(strengthText). I would apply these capabilities with careful judgement and dependable follow-through in the \(job.title) position."]
     }
 
     private func experienceScore(
@@ -357,7 +356,12 @@ class AICareerService {
         }
 
         guard !evidenceParts.isEmpty else { return "" }
-        return "My academic background includes \(naturalList(evidenceParts)). This training has strengthened my ability to learn new systems, work carefully with information, and communicate complex matters clearly."
+
+        if let priority = jobPriorityPhrases(for: job).first, !priority.isEmpty {
+            return "My academic preparation includes \(naturalList(evidenceParts)). This foundation complements my practical experience and supports the analytical depth required for \(embeddedPhrase(priority))."
+        }
+
+        return "My academic preparation includes \(naturalList(evidenceParts)). This foundation complements my practical experience and supports work requiring careful analysis, sound judgement, and clear communication."
     }
 
     private func makeCVPreview(
@@ -481,10 +485,13 @@ class AICareerService {
 
         let clauses = cleaned.components(separatedBy: " and ")
         let verbForms: [(present: String, past: String)] = [
+            ("advise ", "advised "),
             ("analyse ", "analysed "),
             ("analyze ", "analyzed "),
             ("assist ", "assisted "),
+            ("chair ", "chaired "),
             ("compile ", "compiled "),
+            ("contribute ", "contributed "),
             ("conduct ", "conducted "),
             ("coordinate ", "coordinated "),
             ("create ", "created "),
@@ -495,6 +502,7 @@ class AICareerService {
             ("evaluate ", "evaluated "),
             ("facilitate ", "facilitated "),
             ("implement ", "implemented "),
+            ("introduce ", "introduced "),
             ("lead ", "led "),
             ("maintain ", "maintained "),
             ("manage ", "managed "),
@@ -503,14 +511,25 @@ class AICareerService {
             ("prepare ", "prepared "),
             ("produce ", "produced "),
             ("provide ", "provided "),
+            ("research ", "researched "),
             ("review ", "reviewed "),
+            ("supervise ", "supervised "),
             ("support ", "supported "),
             ("write ", "wrote ")
         ]
 
-        let convertedClauses = clauses.enumerated().map { index, clause -> String in
+        let convertedClauses = clauses.enumerated().compactMap { index, clause -> String? in
             let trimmedClause = clause.trimmingCharacters(in: .whitespacesAndNewlines)
             let lowercasedClause = trimmedClause.lowercased()
+
+            if verbForms.contains(where: {
+                let past = $0.past.trimmingCharacters(in: .whitespaces)
+                return lowercasedClause == past
+                    || lowercasedClause.hasPrefix("\(past) ")
+            }) {
+                let sentence = lowercased(trimmedClause)
+                return index == 0 ? "I \(sentence)" : sentence
+            }
 
             if let verb = verbForms.first(where: {
                 lowercasedClause == $0.present.trimmingCharacters(in: .whitespaces)
@@ -526,12 +545,17 @@ class AICareerService {
                 return "\(index == 0 ? "I " : "")\(verb.past.trimmingCharacters(in: .whitespaces))\(spacing)\(remainder)"
             }
 
-            if index == 0 {
-                return "I handled \(actionObjectPhrase(trimmedClause))"
+            if lowercasedClause.hasPrefix("responsible for ") {
+                let remainder = String(trimmedClause.dropFirst("responsible for ".count))
+                return index == 0
+                    ? "I was responsible for \(lowercased(remainder))"
+                    : "was responsible for \(lowercased(remainder))"
             }
-            return actionObjectPhrase(trimmedClause)
+
+            return nil
         }
 
+        guard !convertedClauses.isEmpty else { return "" }
         return sentenceWithPunctuation(convertedClauses.joined(separator: " and "))
     }
 
@@ -541,10 +565,7 @@ class AICareerService {
     ) -> [String] {
         let profileEvidence = profileEvidenceText(for: profile)
         let jobEvidence = jobEvidenceText(for: job)
-        var strengths = normalizedSkills(profile.skills).filter {
-            phrase($0, isSupportedBy: jobEvidence)
-        }
-        strengths = Array(strengths.prefix(3))
+        var strengths: [String] = []
 
         func appendStrength(
             _ value: String,
@@ -560,6 +581,21 @@ class AICareerService {
             strengths.append(value)
         }
 
+        appendStrength(
+            "monitoring, evaluation, and performance reporting",
+            jobTerms: ["monitoring", "evaluation", "performance", "reporting"],
+            profileTerms: ["monitoring", "evaluation", "performance", "reporting"]
+        )
+        appendStrength(
+            "policy analysis and governance",
+            jobTerms: ["policy", "governance", "prescript", "compliance"],
+            profileTerms: ["policy", "governance", "prescript", "compliance"]
+        )
+        appendStrength(
+            "research and evidence synthesis",
+            jobTerms: ["research", "evidence", "analysis", "evaluation"],
+            profileTerms: ["research", "evidence", "analysis", "evaluation"]
+        )
         appendStrength(
             "clear stakeholder communication",
             jobTerms: ["customer", "client", "service", "communication", "stakeholder"],
@@ -839,6 +875,14 @@ class AICareerService {
             .joined(separator: " ")
     }
 
+    private func cleanParagraphPreservingLineBreaks(_ value: String) -> String {
+        value
+            .components(separatedBy: .newlines)
+            .map(cleanInline)
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
     private func cleanInline(_ value: String) -> String {
         let bulletSymbols = ["•", "▪", "◆", "❖", "◈", "●", "○", "■", "□"]
         let withoutBullets = bulletSymbols.reduce(value) { partialResult, symbol in
@@ -862,6 +906,14 @@ class AICareerService {
     private func lowercased(_ value: String) -> String {
         guard let firstCharacter = value.first else { return value }
         return firstCharacter.lowercased() + value.dropFirst()
+    }
+
+    private func lowercasedFirstPersonSentence(_ value: String) -> String {
+        let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.hasPrefix("I "), cleaned.count > 2 else {
+            return lowercased(cleaned)
+        }
+        return "I \(lowercased(String(cleaned.dropFirst(2))))"
     }
 
     private func embeddedPhrase(_ value: String) -> String {

@@ -1,17 +1,16 @@
-name: Import DPSA vacancies
+name: Import partner vacancies
 
 on:
   workflow_dispatch:
   schedule:
-    # Friday evening and Saturday morning in South African Standard Time.
-    - cron: "30 16 * * 5"
-    - cron: "30 5 * * 6"
+    # Daily at 06:15 South African Standard Time.
+    - cron: "15 4 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: dpsa-vacancy-import
+  group: partner-vacancy-import
   cancel-in-progress: false
 
 jobs:
@@ -29,10 +28,13 @@ jobs:
       - name: Install importer
         run: pip install -r tools/requirements.txt
 
-      - name: Test importer
+      - name: Test importers
         run: python -m unittest discover -s tools -p "test_*.py"
 
-      - name: Import latest official circular
+      - name: Import approved partner feeds
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: python tools/import_dpsa_vacancies.py --publish
+          GREENHOUSE_BOARDS_JSON: ${{ vars.GREENHOUSE_BOARDS_JSON }}
+          LEVER_SITES_JSON: ${{ vars.LEVER_SITES_JSON }}
+          RELIEFWEB_APPNAME: ${{ vars.RELIEFWEB_APPNAME }}
+        run: python tools/import_partner_jobs.py --publish

@@ -9,16 +9,10 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
 
     static let reuseIdentifier = "FeaturedJobCollectionCellID"
 
-    private lazy var jobImageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "briefcase.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.backgroundColor = AppTheme.mutedSurface
-        imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = AppTheme.cardRadius
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+    private lazy var jobImageView: CompanyLogoView = {
+        let view = CompanyLogoView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
     private lazy var featuredBadge: UILabel = {
@@ -71,6 +65,11 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        jobImageView.reset()
+    }
+
     private func setupUI() {
         contentView.backgroundColor = AppTheme.surface
         contentView.layer.cornerRadius = AppTheme.cardRadius
@@ -111,6 +110,7 @@ class FeaturedJobCollectionCell: UICollectionViewCell {
     }
 
     func configure(with job: Job) {
+        jobImageView.configure(with: job)
         jobTitleLabel.text = job.title
         companyLabel.text = job.companyName
         salaryLabel.text = job.salaryText

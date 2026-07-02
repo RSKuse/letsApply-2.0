@@ -17,8 +17,12 @@ class AutoApplyAssistantViewController: UIViewController {
     private let aiCareerService = AICareerService()
     private let firestoreService = FirestoreService()
     private let pdfService = CVPDFService()
+    private let z83PDFService = Z83PDFService()
+    private let z83ProfileStore = Z83ProfileStore()
     private var autoApplyPackage: AutoApplyPackage?
+    private var preparedZ83URL: URL?
     private var isSubmitting = false
+    private var didRunDebugAutomation = false
 
     private lazy var scrollView: UIScrollView = {
         let scrollView = UIScrollView()
@@ -76,6 +80,20 @@ class AutoApplyAssistantViewController: UIViewController {
         stackView.spacing = 8
         stackView.translatesAutoresizingMaskIntoConstraints = false
         return stackView
+    }()
+
+    private lazy var prepareZ83Button: UIButton = {
+        let button = UIButton(type: .system)
+        button.configuration = AppTheme.primaryButtonConfiguration(
+            title: "Complete and Sign Z83",
+            systemImageName: "signature"
+        )
+        button.configuration?.baseBackgroundColor = AppTheme.mutedSurface
+        button.configuration?.baseForegroundColor = AppTheme.brand
+        button.addTarget(self, action: #selector(prepareZ83Tapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        return button
     }()
 
     private lazy var scoreLabel: UILabel = {
@@ -407,6 +425,11 @@ class AutoApplyAssistantViewController: UIViewController {
         let checklistItems = requiredChecklistItems()
         checklistCardView.isHidden = checklistItems.isEmpty
 
+        if job.requiresGovernmentFlow {
+            refreshPreparedZ83()
+            checklistStackView.addArrangedSubview(prepareZ83Button)
+        }
+
         checklistItems.forEach { item in
             let button = UIButton(type: .system)
             var configuration = UIButton.Configuration.plain()
@@ -428,6 +451,16 @@ class AutoApplyAssistantViewController: UIViewController {
             }
             button.configuration = configuration
             button.contentHorizontalAlignment = .leading
+            if item.lowercased().contains("z83") {
+                button.isSelected = preparedZ83URL != nil
+                button.configuration?.image = UIImage(
+                    systemName: button.isSelected ? "checkmark.circle.fill" : "circle"
+                )
+                button.configuration?.baseForegroundColor = button.isSelected
+                    ? AppTheme.brand
+                    : .label
+                button.isUserInteractionEnabled = false
+            }
             button.addTarget(self, action: #selector(checklistItemTapped(_:)), for: .touchUpInside)
             checklistStackView.addArrangedSubview(button)
         }
@@ -517,6 +550,22 @@ class AutoApplyAssistantViewController: UIViewController {
                 print("LET_APPLY_DEBUG_DOCUMENT_ERROR=\(error.localizedDescription)")
             }
         }
+
+        if !didRunDebugAutomation,
+           ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_EMAIL_PREVIEW"] == "1" {
+            didRunDebugAutomation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.openEmailPreview()
+            }
+        }
+
+        if !didRunDebugAutomation,
+           ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_CONFIRM_SUBMISSION"] == "1" {
+            didRunDebugAutomation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.approveTapped()
+            }
+        }
         #endif
     }
 
@@ -574,7 +623,7 @@ class AutoApplyAssistantViewController: UIViewController {
             case .governmentEmail:
                 return "Review the government checklist first. Submit Application then opens a prepared email with your CV and cover letter attached for your approval."
             case .governmentWebsite:
-                return "Review the government checklist and save your documents. Submit Application then opens the official vacancy website."
+                return "Complete the government checklist, prepare your Z83, CV, and cover letter, then continue to \(job.applicationWebsiteName) to finish the official submission."
             case .governmentManual, .pdfCircular:
                 return job.application.applicationInstructions.isEmpty
                     ? "Review the circular, Z83 requirements, supporting documents, reference number, and delivery instructions before continuing."
@@ -590,7 +639,7 @@ class AutoApplyAssistantViewController: UIViewController {
         case .email:
             return "A ready-to-send email will open with the employer’s address, your message, CV, and cover letter. You review it and tap Send."
         case .externalPortal:
-            return "The employer’s website will open for you to complete its questions and attach the documents prepared here."
+            return "Your documents will be prepared first. You can save or share them, copy the official link, and then continue to \(job.applicationWebsiteName)."
         case .requiredForm:
             let formName = job.application.formName.isEmpty ? "the required employment form" : job.application.formName
             let requiredItems = job.application.requiredForms + job.application.requiredDocuments
@@ -612,7 +661,7 @@ class AutoApplyAssistantViewController: UIViewController {
         case .email:
             return "Mail opens next with your documents attached. The application is tracked only after Mail confirms that you sent it."
         case .externalPortal:
-            return "Share or save your documents first if needed. The employer’s application website opens when you continue."
+            return "Save or share the prepared documents before opening the official website. The application remains marked Continue until you finish it there."
         case .requiredForm:
             return "Export the prepared documents, open the required form, and check every declaration before signing or submitting."
         case .manual:
@@ -641,7 +690,16 @@ class AutoApplyAssistantViewController: UIViewController {
             return
         }
 
-        guard let user = Auth.auth().currentUser, !user.isAnonymous, user.uid == userProfile.uid else {
+        #if DEBUG
+        let debugAccess = ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_AUTH"] == "1"
+        #else
+        let debugAccess = false
+        #endif
+
+        guard debugAccess
+                || (Auth.auth().currentUser.map {
+                    !$0.isAnonymous && $0.uid == userProfile.uid
+                } ?? false) else {
             showAlert(title: "Create Profile", message: "Please sign in before submitting this application.")
             return
         }
@@ -679,6 +737,19 @@ class AutoApplyAssistantViewController: UIViewController {
         sender.configuration?.baseForegroundColor = sender.isSelected ? AppTheme.brand : .label
     }
 
+    @objc private func prepareZ83Tapped() {
+        let editor = Z83EditorViewController(job: job, userProfile: userProfile)
+        editor.onZ83Ready = { [weak self] url in
+            self?.preparedZ83URL = url
+            self?.configureChecklist()
+            self?.showAlert(
+                title: "Z83 Ready",
+                message: "The signed Z83 will be included with this application. You can reopen it to review or edit it before submitting."
+            )
+        }
+        navigationController?.pushViewController(editor, animated: true)
+    }
+
     private func confirmationContent() -> (title: String, message: String, actionTitle: String) {
         switch job.applicationRoute {
         case .inApp:
@@ -695,16 +766,23 @@ class AutoApplyAssistantViewController: UIViewController {
             )
         case .externalPortal:
             return (
-                "Continue on Employer Website?",
-                "Your application will be saved as ready to continue, then the employer’s website will open for its questions and declarations.",
-                "Open Website"
+                "Prepare Website Application?",
+                "Let’s Apply will keep your Z83, CV, and cover letter ready, then give you options to save the documents or open the official application website.",
+                "Continue"
             )
         case .requiredForm:
-            return (
-                "Prepare Required Form?",
-                "Your CV and cover letter will be available to export before the official application form opens. You remain in control of declarations and signatures.",
-                "Prepare"
-            )
+            let formReady = preparedZ83URL != nil
+            return formReady
+                ? (
+                    "Continue With Manual Application?",
+                    "Your signed Z83, CV, and cover letter are ready. Let’s Apply will show the official instructions and let you share the documents.",
+                    "Continue"
+                )
+                : (
+                    "Complete Required Documents?",
+                    "Prepare and review the required form before continuing with the official application instructions.",
+                    "Continue"
+                )
         case .manual:
             return (
                 "View Employer Instructions?",
@@ -723,9 +801,13 @@ class AutoApplyAssistantViewController: UIViewController {
             }
         case .email:
             openEmailApplication()
-        case .externalPortal, .requiredForm:
+        case .externalPortal:
             saveApplication(status: "ready-to-submit") { [weak self] in
-                self?.openApplicationDestination()
+                self?.showPortalHandoffOptions()
+            }
+        case .requiredForm:
+            saveApplication(status: "requires-manual-action") { [weak self] in
+                self?.showManualInstructions()
             }
         case .manual:
             saveApplication(status: "requires-manual-action") { [weak self] in
@@ -779,7 +861,7 @@ class AutoApplyAssistantViewController: UIViewController {
             let emailDraft = emailDraftParts()
             let composer = MFMailComposeViewController()
             composer.mailComposeDelegate = self
-            composer.setToRecipients([job.application.applicationEmail])
+            composer.setToRecipients([job.resolvedApplicationEmail])
             composer.setSubject(emailDraft.subject ?? "Application for \(job.title)")
             composer.setMessageBody(emailDraft.body ?? "", isHTML: false)
 
@@ -799,16 +881,45 @@ class AutoApplyAssistantViewController: UIViewController {
     }
 
     private func showEmailFallbackAlert() {
+        let title: String
+        let message: String
+        #if targetEnvironment(simulator)
+        title = "Simulator Email Preview"
+        message = "Apple Mail cannot send from iOS Simulator. Preview the complete prepared email and all attachments here, then test the final Send action on a physical iPhone."
+        #else
+        title = "Mail Is Not Set Up"
+        message = "Configure an account in Apple Mail, or preview and share the generated application documents with your preferred email app."
+        #endif
+
         let alert = UIAlertController(
-            title: "Mail Is Not Set Up",
-            message: "Export the CV and cover letter, then attach them in your preferred email app. The recruiter email and draft remain available on this screen.",
+            title: title,
+            message: message,
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "Export Documents", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "Preview Prepared Email", style: .default) { [weak self] _ in
+            self?.openEmailPreview()
+        })
+        alert.addAction(UIAlertAction(title: "Share Documents", style: .default) { [weak self] _ in
             self?.presentDocumentExport(openDestinationAfter: false)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
+    }
+
+    private func openEmailPreview() {
+        do {
+            let urls = try generatedDocumentURLs()
+            let draft = emailDraftParts()
+            let preview = EmailApplicationPreviewViewController(
+                recipient: job.resolvedApplicationEmail,
+                subject: draft.subject ?? "Application for \(job.title)",
+                body: draft.body ?? "",
+                attachmentURLs: urls
+            )
+            navigationController?.pushViewController(preview, animated: true)
+        } catch {
+            showAlert(title: "Documents Not Ready", message: error.localizedDescription)
+        }
     }
 
     private func showManualInstructions() {
@@ -824,6 +935,39 @@ class AutoApplyAssistantViewController: UIViewController {
             self?.presentDocumentExport(openDestinationAfter: false)
         })
         alert.addAction(UIAlertAction(title: "Done", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showPortalHandoffOptions() {
+        guard applicationDestinationURL() != nil else {
+            showAlert(
+                title: "Application Website Missing",
+                message: "The vacancy does not include a verified application website. Your documents remain ready to share manually."
+            )
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "Application Package Ready",
+            message: "Save or share your documents before completing the official questions and declarations on \(job.applicationWebsiteName).",
+            preferredStyle: .actionSheet
+        )
+        alert.addAction(UIAlertAction(title: "Save or Share Documents", style: .default) { [weak self] _ in
+            self?.presentDocumentExport(openDestinationAfter: false)
+        })
+        alert.addAction(UIAlertAction(title: "Open Official Website", style: .default) { [weak self] _ in
+            self?.openApplicationDestination()
+        })
+        alert.addAction(UIAlertAction(title: "Copy Website Link", style: .default) { [weak self] _ in
+            guard let self, let url = self.applicationDestinationURL() else { return }
+            UIPasteboard.general.string = url.absoluteString
+            self.showAlert(
+                title: "Website Copied",
+                message: "The official application link is ready to paste into Safari."
+            )
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.popoverPresentationController?.sourceView = approveButton
         present(alert, animated: true)
     }
 
@@ -856,7 +1000,43 @@ class AutoApplyAssistantViewController: UIViewController {
             job: job,
             text: coverLetterTextView.text ?? ""
         )
-        return [cvURL, coverLetterURL]
+        var urls = [cvURL, coverLetterURL]
+        if job.requiresGovernmentFlow {
+            guard let z83URL = resolvedZ83URL() else {
+                throw Z83PDFService.Z83PDFError.incomplete([
+                    "open Complete and Sign Z83, review the declarations, and add your signature"
+                ])
+            }
+            urls.insert(z83URL, at: 0)
+        }
+        return urls
+    }
+
+    private func refreshPreparedZ83() {
+        guard job.requiresGovernmentFlow,
+              let profile = z83ProfileStore.load(userId: userProfile.uid),
+              profile.isComplete else {
+            preparedZ83URL = nil
+            prepareZ83Button.configuration?.title = "Complete and Sign Z83"
+            prepareZ83Button.configuration?.image = UIImage(systemName: "signature")
+            return
+        }
+
+        preparedZ83URL = try? z83PDFService.generateZ83(
+            profile: profile,
+            userProfile: userProfile,
+            job: job
+        )
+        prepareZ83Button.configuration?.title = "Review or Edit Z83"
+        prepareZ83Button.configuration?.image = UIImage(systemName: "checkmark.seal.fill")
+    }
+
+    private func resolvedZ83URL() -> URL? {
+        if let preparedZ83URL, FileManager.default.fileExists(atPath: preparedZ83URL.path) {
+            return preparedZ83URL
+        }
+        refreshPreparedZ83()
+        return preparedZ83URL
     }
 
     private func presentDocumentExport(openDestinationAfter: Bool) {
@@ -890,32 +1070,20 @@ class AutoApplyAssistantViewController: UIViewController {
     }
 
     private func applicationDestinationURL() -> URL? {
-        let rawURL = job.application.applicationUrl
+        let rawURL = job.resolvedApplicationURLString
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if !rawURL.isEmpty {
-            return URL(string: rawURL)
-        }
-
-        let formText = """
-        \(job.application.formName)
-        \(job.application.requiredForms.joined(separator: " "))
-        \(job.application.requiredDocuments.joined(separator: " "))
-        """
-            .lowercased()
-        if job.application.requiresZ83 || formText.contains("z83") {
-            return URL(string: "https://www.dpsa.gov.za/dpsa2g/documents/vacancies/editable%20Approved%20New%20Z83%20form%20Gazetted%206%20Nov%202020.pdf")
-        }
-
-        return nil
+        return rawURL.isEmpty ? nil : URL(string: rawURL)
     }
 
     private func applicationDestination() -> String? {
         switch job.applicationRoute {
         case .email:
-            return job.application.applicationEmail
-        case .externalPortal, .requiredForm:
+            return job.resolvedApplicationEmail
+        case .externalPortal:
             return applicationDestinationURL()?.absoluteString
+        case .requiredForm:
+            return job.application.applicationInstructions
         case .inApp:
             return "Let’s Apply"
         case .manual:

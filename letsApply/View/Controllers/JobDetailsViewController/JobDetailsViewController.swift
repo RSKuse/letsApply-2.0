@@ -31,6 +31,7 @@ class JobDetailsViewController: UIViewController {
             requirementsSection,
             qualificationsSection,
             experienceSection,
+            applicationSection,
             companySection,
             premiumToolsStackView
         ])
@@ -50,16 +51,10 @@ class JobDetailsViewController: UIViewController {
         return view
     }()
 
-    private lazy var companyIconView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "building.2.fill")
-        imageView.tintColor = AppTheme.brand
-        imageView.backgroundColor = AppTheme.mutedSurface
-        imageView.contentMode = .scaleAspectFit
-        imageView.layer.cornerRadius = AppTheme.cardRadius
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+    private lazy var companyIconView: CompanyLogoView = {
+        let view = CompanyLogoView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
     private lazy var titleLabel: UILabel = {
@@ -121,6 +116,7 @@ class JobDetailsViewController: UIViewController {
     private lazy var requirementsSection = makeSection(title: "Requirements", body: bulletText(job.requirements, fallback: "No specific requirements listed."))
     private lazy var qualificationsSection = makeSection(title: "Qualifications", body: bulletText(job.qualifications, fallback: "No specific qualifications listed."))
     private lazy var experienceSection = makeSection(title: "Experience", body: experienceText(for: job))
+    private lazy var applicationSection = makeApplicationSection()
     private lazy var companySection = makeSection(title: "Company", body: "\(job.companyName)\n\(job.jobCategory)")
 
     private lazy var premiumToolsStackView: UIStackView = {
@@ -163,6 +159,20 @@ class JobDetailsViewController: UIViewController {
         fetchProfileState()
         fetchSavedState()
         fetchApplicationState()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_JOB_SECTION"]
+                == "application" else {
+            return
+        }
+        view.layoutIfNeeded()
+        let targetY = max(0, applicationSection.frame.minY - 12)
+        scrollView.setContentOffset(CGPoint(x: 0, y: targetY), animated: false)
+        #endif
     }
 
     private func setupNavigationBar() {
@@ -218,6 +228,7 @@ class JobDetailsViewController: UIViewController {
     }
 
     private func configure() {
+        companyIconView.configure(with: job)
         titleLabel.text = job.title
         companyLabel.text = "\(job.companyName)\n\(job.locationText)"
     }
@@ -343,6 +354,139 @@ class JobDetailsViewController: UIViewController {
         return stackView
     }
 
+    private func makeApplicationSection() -> UIView {
+        let titleLabel = UILabel()
+        titleLabel.text = "How to Apply"
+        titleLabel.font = UIFont.systemFont(ofSize: 19, weight: .bold)
+        titleLabel.textColor = .label
+
+        let methodLabel = applicationDetailLabel(
+            title: "Method",
+            value: job.applicationRoute.title
+        )
+        let referenceLabel = applicationDetailLabel(
+            title: "Reference",
+            value: job.application.referenceNumber
+        )
+        referenceLabel.isHidden = job.application.referenceNumber
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        let emailLabel = applicationDetailLabel(
+            title: "Application email",
+            value: job.resolvedApplicationEmail
+        )
+        emailLabel.isHidden = job.resolvedApplicationEmail
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        let copyEmailButton = applicationActionButton(
+            title: "Copy application email",
+            imageName: "doc.on.doc",
+            action: #selector(copyApplicationEmailTapped)
+        )
+        copyEmailButton.isHidden = emailLabel.isHidden
+
+        let applicationWebsite = job.resolvedApplicationURLString
+        let websiteLabel = applicationDetailLabel(
+            title: "Application website",
+            value: applicationWebsite
+        )
+        websiteLabel.isHidden = applicationWebsite
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        let openWebsiteButton = applicationActionButton(
+            title: "Open \(job.applicationWebsiteName)",
+            imageName: "safari",
+            action: #selector(openApplicationWebsiteTapped)
+        )
+        openWebsiteButton.isHidden = websiteLabel.isHidden
+
+        let copyWebsiteButton = applicationActionButton(
+            title: "Copy application website",
+            imageName: "doc.on.doc",
+            action: #selector(copyApplicationWebsiteTapped)
+        )
+        copyWebsiteButton.isHidden = websiteLabel.isHidden
+
+        let instructions = job.application.applicationInstructions
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let instructionsLabel = applicationDetailLabel(
+            title: "Official instructions",
+            value: instructions
+        )
+        instructionsLabel.isHidden = instructions.isEmpty
+
+        let copyInstructionsButton = applicationActionButton(
+            title: "Copy application instructions",
+            imageName: "doc.on.doc",
+            action: #selector(copyApplicationInstructionsTapped)
+        )
+        copyInstructionsButton.isHidden = instructions.isEmpty
+
+        let sourceButton = applicationActionButton(
+            title: "View official vacancy source",
+            imageName: "link",
+            action: #selector(openSourceTapped)
+        )
+        sourceButton.isHidden = job.sourceUrl
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        let stackView = UIStackView(arrangedSubviews: [
+            titleLabel,
+            methodLabel,
+            referenceLabel,
+            emailLabel,
+            copyEmailButton,
+            websiteLabel,
+            openWebsiteButton,
+            copyWebsiteButton,
+            instructionsLabel,
+            copyInstructionsButton,
+            sourceButton
+        ])
+        stackView.axis = .vertical
+        stackView.spacing = 12
+        stackView.backgroundColor = AppTheme.surface
+        stackView.layer.cornerRadius = AppTheme.cardRadius
+        stackView.layer.borderColor = AppTheme.border.cgColor
+        stackView.layer.borderWidth = 1
+        stackView.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        stackView.isLayoutMarginsRelativeArrangement = true
+        return stackView
+    }
+
+    private func applicationDetailLabel(title: String, value: String) -> UILabel {
+        let label = UILabel()
+        label.text = "\(title)\n\(value)"
+        label.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+        label.textColor = AppTheme.secondaryText
+        label.numberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        return label
+    }
+
+    private func applicationActionButton(
+        title: String,
+        imageName: String,
+        action: Selector
+    ) -> UIButton {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.gray()
+        configuration.title = title
+        configuration.image = UIImage(systemName: imageName)
+        configuration.imagePadding = 8
+        configuration.baseForegroundColor = AppTheme.brand
+        configuration.cornerStyle = .medium
+        button.configuration = configuration
+        button.contentHorizontalAlignment = .leading
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        button.addTarget(self, action: action, for: .touchUpInside)
+        return button
+    }
+
     private func makePremiumButton(title: String, action: Selector) -> UIButton {
         let button = UIButton(type: .system)
         var configuration = UIButton.Configuration.filled()
@@ -368,11 +512,79 @@ class JobDetailsViewController: UIViewController {
     }
 
     private func experienceText(for job: Job) -> String {
-        let years = "\(job.experience.minYears)-\(job.experience.preferredYears) years"
-        if job.experience.details.isEmpty {
-            return years
+        let details = job.experience.details
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let minimum = job.experience.minYears
+        let preferred = job.experience.preferredYears
+
+        if minimum <= 0, preferred <= 0 {
+            return details.isEmpty
+                ? "See the official requirements for experience details."
+                : details
         }
-        return "\(years)\n\(job.experience.details)"
+
+        let years: String
+        if minimum == preferred || preferred <= 0 {
+            years = "\(minimum) \(minimum == 1 ? "year" : "years") required"
+        } else {
+            years = "\(minimum)-\(preferred) years"
+        }
+        return details.isEmpty ? years : "\(years)\n\(details)"
+    }
+
+    @objc private func copyApplicationEmailTapped() {
+        let email = job.resolvedApplicationEmail
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else { return }
+        UIPasteboard.general.string = email
+        showAlert(
+            title: "Email Copied",
+            message: "\(email) is ready to paste into Mail or Gmail."
+        )
+    }
+
+    @objc private func copyApplicationInstructionsTapped() {
+        let instructions = job.application.applicationInstructions
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !instructions.isEmpty else { return }
+        UIPasteboard.general.string = instructions
+        showAlert(
+            title: "Instructions Copied",
+            message: "The official application instructions are ready to paste."
+        )
+    }
+
+    @objc private func openApplicationWebsiteTapped() {
+        openURL(job.resolvedApplicationURLString, missingTitle: "Application Website Missing")
+    }
+
+    @objc private func copyApplicationWebsiteTapped() {
+        let website = job.resolvedApplicationURLString
+        guard !website.isEmpty else { return }
+        UIPasteboard.general.string = website
+        showAlert(
+            title: "Website Copied",
+            message: "The official application website is ready to paste into Safari."
+        )
+    }
+
+    @objc private func openSourceTapped() {
+        openURL(job.sourceUrl, missingTitle: "Vacancy Source Missing")
+    }
+
+    private func openURL(_ value: String, missingTitle: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.lowercased().hasPrefix("http")
+            ? trimmed
+            : "https://\(trimmed)"
+        guard let url = URL(string: normalized), !trimmed.isEmpty else {
+            showAlert(
+                title: missingTitle,
+                message: "This vacancy does not contain a valid web address."
+            )
+            return
+        }
+        UIApplication.shared.open(url)
     }
 
     @objc private func applyTapped() {

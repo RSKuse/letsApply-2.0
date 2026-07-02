@@ -11,6 +11,7 @@ struct Job: Codable {
     let title: String
     let companyName: String
     let companyImageName: String?
+    let companyLogoURL: String?
     let location: Location
     let jobType: String
     let remote: Bool
@@ -39,6 +40,7 @@ struct Job: Codable {
         title: String,
         companyName: String,
         companyImageName: String?,
+        companyLogoURL: String? = nil,
         location: Location,
         jobType: String,
         remote: Bool,
@@ -66,6 +68,7 @@ struct Job: Codable {
         self.title = title
         self.companyName = companyName
         self.companyImageName = companyImageName
+        self.companyLogoURL = companyLogoURL
         self.location = location
         self.jobType = jobType
         self.remote = remote
@@ -112,32 +115,27 @@ struct Job: Codable {
         let method = application.method
             .lowercased()
             .filter { $0.isLetter }
-        switch method {
-        case "inapp", "internal", "internalapply":
+
+        if ["inapp", "internal", "internalapply"].contains(method) {
             return .internalApply
-        case "email":
+        }
+
+        if !resolvedApplicationEmail.isEmpty {
             return requiresGovernmentFlow ? .governmentEmail : .email
-        case "portal", "external", "externalportal", "externalwebsite":
+        }
+
+        if !resolvedApplicationURLString.isEmpty {
             return requiresGovernmentFlow ? .governmentWebsite : .externalWebsite
-        case "governmentemail":
-            return .governmentEmail
-        case "governmentwebsite":
-            return .governmentWebsite
-        case "governmentmanual":
-            return .governmentManual
-        case "pdfcircular":
-            return .pdfCircular
+        }
+
+        switch method {
         case "form", "requiredform", "z83":
-            if requiresGovernmentFlow {
-                if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return .governmentEmail
-                }
-                if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return .governmentWebsite
-                }
-                return .governmentManual
-            }
-            return .manualInstruction
+            return requiresGovernmentFlow ? .governmentManual : .manualInstruction
+        case "pdfcircular":
+            return requiresGovernmentFlow ? .pdfCircular : .manualInstruction
+        case "email", "governmentemail", "portal", "external", "externalportal",
+             "externalwebsite", "governmentwebsite", "governmentmanual":
+            return requiresGovernmentFlow ? .governmentManual : .manualInstruction
         case "manual", "manualinstructions", "manualinstruction":
             return .manualInstruction
         default:
@@ -145,25 +143,9 @@ struct Job: Codable {
         }
 
         if requiresGovernmentFlow {
-            if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return .governmentEmail
-            }
-
-            if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return .governmentWebsite
-            }
-
             return sourceType.lowercased() == JobSourceType.publicFeed.rawValue.lowercased()
                 ? .pdfCircular
                 : .governmentManual
-        }
-
-        if !application.applicationEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .email
-        }
-
-        if !application.applicationUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .externalWebsite
         }
 
         if !application.applicationInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -171,6 +153,83 @@ struct Job: Codable {
         }
 
         return .internalApply
+    }
+
+    var resolvedApplicationEmail: String {
+        let suppliedEmail = application.applicationEmail
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let email = Self.firstEmailAddress(in: suppliedEmail) {
+            return email
+        }
+
+        return Self.firstEmailAddress(in: application.applicationInstructions) ?? ""
+    }
+
+    var resolvedApplicationURLString: String {
+        let suppliedURL = application.applicationUrl
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if Self.isValidWebAddress(suppliedURL) {
+            return suppliedURL.lowercased().hasPrefix("http")
+                ? suppliedURL
+                : "https://\(suppliedURL)"
+        }
+
+        if let instructionURL = Self.firstWebAddress(
+            in: application.applicationInstructions
+        ) {
+            return instructionURL
+        }
+
+        let department = companyName.lowercased()
+        if department.contains("higher education") {
+            return "https://z83.ngnscan.co.za/login"
+        }
+
+        return ""
+    }
+
+    var applicationWebsiteName: String {
+        let department = companyName.lowercased()
+        if department.contains("higher education") {
+            return "DHET e-Recruitment"
+        }
+        return requiresGovernmentFlow
+            ? "Official government application website"
+            : "Employer application website"
+    }
+
+    private static func isValidWebAddress(_ value: String) -> Bool {
+        guard !value.isEmpty else { return false }
+        let normalized = value.lowercased().hasPrefix("http")
+            ? value
+            : "https://\(value)"
+        guard let url = URL(string: normalized),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return false
+        }
+        return true
+    }
+
+    private static func firstEmailAddress(in value: String) -> String? {
+        let pattern = #"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#
+        guard let range = value.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
+        return String(value[range]).trimmingCharacters(in: CharacterSet(charactersIn: ".,;"))
+    }
+
+    private static func firstWebAddress(in value: String) -> String? {
+        let pattern = #"(?i)(?:https?://|www\.)[^\s)>]+"#
+        guard let range = value.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
+        let rawURL = String(value[range])
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,;"))
+        return rawURL.lowercased().hasPrefix("http")
+            ? rawURL
+            : "https://\(rawURL)"
     }
 
     var applicationRoute: JobApplicationRoute {
