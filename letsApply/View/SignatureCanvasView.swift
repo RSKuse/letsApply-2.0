@@ -7,9 +7,30 @@ import UIKit
 
 final class SignatureCanvasView: UIView {
 
+    var onDrawingStateChanged: ((Bool) -> Void)?
+
     private var strokes: [[CGPoint]] = []
     private var activeStroke: [CGPoint] = []
     private var pendingNormalizedStrokes: [SignatureStroke] = []
+
+    private lazy var drawingPanGesture: UIPanGestureRecognizer = {
+        let gesture = UIPanGestureRecognizer(
+            target: self,
+            action: #selector(handleDrawingPan(_:))
+        )
+        gesture.minimumNumberOfTouches = 1
+        gesture.maximumNumberOfTouches = 1
+        gesture.cancelsTouchesInView = false
+        return gesture
+    }()
+
+    var drawingGestureRecognizer: UIGestureRecognizer {
+        drawingPanGesture
+    }
+
+    var hasSignature: Bool {
+        !signatureStrokes.isEmpty
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -20,6 +41,7 @@ final class SignatureCanvasView: UIView {
         isMultipleTouchEnabled = false
         accessibilityLabel = "Signature pad"
         accessibilityHint = "Draw your signature with one finger."
+        addGestureRecognizer(drawingPanGesture)
     }
 
     required init?(coder: NSCoder) {
@@ -70,29 +92,6 @@ final class SignatureCanvasView: UIView {
         }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let point = touches.first?.location(in: self) else { return }
-        activeStroke = [point]
-        setNeedsDisplay()
-    }
-
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let point = touches.first?.location(in: self) else { return }
-        activeStroke.append(point)
-        setNeedsDisplay()
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let point = touches.first?.location(in: self) {
-            activeStroke.append(point)
-        }
-        if activeStroke.count > 1 {
-            strokes.append(activeStroke)
-        }
-        activeStroke = []
-        setNeedsDisplay()
-    }
-
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         context.setStrokeColor(UIColor.label.cgColor)
@@ -114,6 +113,55 @@ final class SignatureCanvasView: UIView {
         context.move(to: CGPoint(x: 16, y: baselineY))
         context.addLine(to: CGPoint(x: bounds.width - 16, y: baselineY))
         context.strokePath()
+    }
+
+    @objc private func handleDrawingPan(_ gesture: UIPanGestureRecognizer) {
+        let point = constrainedPoint(gesture.location(in: self))
+
+        switch gesture.state {
+        case .began:
+            onDrawingStateChanged?(true)
+            activeStroke = [point]
+            setNeedsDisplay()
+        case .changed:
+            guard activeStroke.last.map({ distance(from: $0, to: point) > 0.8 }) ?? true else {
+                return
+            }
+            activeStroke.append(point)
+            setNeedsDisplay()
+        case .ended:
+            finishActiveStroke(with: point)
+            onDrawingStateChanged?(false)
+        case .cancelled, .failed:
+            finishActiveStroke(with: nil)
+            onDrawingStateChanged?(false)
+        default:
+            break
+        }
+    }
+
+    private func finishActiveStroke(with finalPoint: CGPoint?) {
+        if let finalPoint,
+           activeStroke.last.map({ distance(from: $0, to: finalPoint) > 0.8 }) ?? true {
+            activeStroke.append(finalPoint)
+        }
+
+        if activeStroke.count > 1 {
+            strokes.append(activeStroke)
+        }
+        activeStroke = []
+        setNeedsDisplay()
+    }
+
+    private func constrainedPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(
+            x: min(max(point.x, 0), bounds.width),
+            y: min(max(point.y, 0), bounds.height)
+        )
+    }
+
+    private func distance(from first: CGPoint, to second: CGPoint) -> CGFloat {
+        hypot(second.x - first.x, second.y - first.y)
     }
 
     private func restorePendingStrokesIfPossible() {

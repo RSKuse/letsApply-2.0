@@ -9,6 +9,8 @@ final class Z83EditorViewController: UIViewController {
 
     var onZ83Ready: ((URL) -> Void)?
 
+    private static let signaturePasteboardType = "com.simphiwe.letsApply.signature-strokes"
+
     private let job: Job
     private let userProfile: UserProfile
     private let profileStore = Z83ProfileStore()
@@ -132,6 +134,9 @@ final class Z83EditorViewController: UIViewController {
 
     private lazy var signatureCanvas: SignatureCanvasView = {
         let view = SignatureCanvasView()
+        view.onDrawingStateChanged = { [weak self] isDrawing in
+            self?.scrollView.isScrollEnabled = !isDrawing
+        }
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -205,6 +210,9 @@ final class Z83EditorViewController: UIViewController {
         setupDetailsCard()
         setupDeclarationsCard()
         setupSignatureCard()
+        scrollView.panGestureRecognizer.require(
+            toFail: signatureCanvas.drawingGestureRecognizer
+        )
 
         [headerCard, detailsCard, declarationsCard, signatureCard].forEach {
             contentStackView.addArrangedSubview($0)
@@ -332,6 +340,38 @@ final class Z83EditorViewController: UIViewController {
         clearButton.contentHorizontalAlignment = .trailing
         clearButton.addTarget(self, action: #selector(clearSignatureTapped), for: .touchUpInside)
 
+        let clipboardActions = UIStackView(arrangedSubviews: [
+            makeSignatureActionButton(
+                title: "Copy",
+                systemImageName: "doc.on.doc",
+                action: #selector(copySignatureTapped)
+            ),
+            makeSignatureActionButton(
+                title: "Paste",
+                systemImageName: "doc.on.clipboard",
+                action: #selector(pasteSignatureTapped)
+            )
+        ])
+        clipboardActions.axis = .horizontal
+        clipboardActions.distribution = .fillEqually
+        clipboardActions.spacing = 10
+
+        let savedActions = UIStackView(arrangedSubviews: [
+            makeSignatureActionButton(
+                title: "Save for Future",
+                systemImageName: "signature",
+                action: #selector(saveSignatureTapped)
+            ),
+            makeSignatureActionButton(
+                title: "Use Saved",
+                systemImageName: "arrow.down.doc",
+                action: #selector(useSavedSignatureTapped)
+            )
+        ])
+        savedActions.axis = .horizontal
+        savedActions.distribution = .fillEqually
+        savedActions.spacing = 10
+
         let declarationLabel = makeLabel(
             text: "I confirm that the information is complete and correct and I approve applying my signature to this Z83.",
             font: .systemFont(ofSize: 13, weight: .semibold),
@@ -347,6 +387,8 @@ final class Z83EditorViewController: UIViewController {
             title,
             note,
             signatureCanvas,
+            clipboardActions,
+            savedActions,
             clearButton,
             declarationRow
         ])
@@ -354,6 +396,8 @@ final class Z83EditorViewController: UIViewController {
 
         NSLayoutConstraint.activate([
             signatureCanvas.heightAnchor.constraint(equalToConstant: 150),
+            clipboardActions.heightAnchor.constraint(equalToConstant: 44),
+            savedActions.heightAnchor.constraint(equalToConstant: 44),
             declarationSwitch.widthAnchor.constraint(equalToConstant: 51)
         ])
     }
@@ -500,6 +544,84 @@ final class Z83EditorViewController: UIViewController {
         signatureCanvas.clear()
     }
 
+    @objc private func copySignatureTapped() {
+        let strokes = signatureCanvas.signatureStrokes
+        guard !strokes.isEmpty,
+              let data = try? JSONEncoder().encode(strokes) else {
+            showAlert(
+                title: "No Signature to Copy",
+                message: "Sign inside the box first, then tap Copy."
+            )
+            return
+        }
+
+        UIPasteboard.general.setData(
+            data,
+            forPasteboardType: Self.signaturePasteboardType
+        )
+        showAlert(
+            title: "Signature Copied",
+            message: "Your signature is ready to paste into another Let’s Apply Z83."
+        )
+    }
+
+    @objc private func pasteSignatureTapped() {
+        guard let data = UIPasteboard.general.data(
+            forPasteboardType: Self.signaturePasteboardType
+        ),
+        let strokes = try? JSONDecoder().decode([SignatureStroke].self, from: data),
+        !strokes.isEmpty else {
+            showAlert(
+                title: "No Let’s Apply Signature Found",
+                message: "Copy a signature from a Let’s Apply Z83 first, then return here and tap Paste."
+            )
+            return
+        }
+
+        signatureCanvas.signatureStrokes = strokes
+    }
+
+    @objc private func saveSignatureTapped() {
+        let strokes = signatureCanvas.signatureStrokes
+        guard !strokes.isEmpty else {
+            showAlert(
+                title: "No Signature to Save",
+                message: "Sign inside the box first, then save it for future Z83 applications."
+            )
+            return
+        }
+
+        var profile = captureProfile()
+        profile.signatureStrokes = strokes
+
+        do {
+            try profileStore.save(profile, userId: userProfile.uid)
+            z83Profile.signatureStrokes = strokes
+            showAlert(
+                title: "Signature Saved",
+                message: "You can reuse this signature on future Z83 applications and still review it before submitting."
+            )
+        } catch {
+            showAlert(title: "Signature Could Not Be Saved", message: error.localizedDescription)
+        }
+    }
+
+    @objc private func useSavedSignatureTapped() {
+        let savedStrokes = profileStore
+            .load(userId: userProfile.uid)?
+            .signatureStrokes ?? z83Profile.signatureStrokes
+
+        guard !savedStrokes.isEmpty else {
+            showAlert(
+                title: "No Saved Signature",
+                message: "Sign once and tap Save for Future before trying to reuse it."
+            )
+            return
+        }
+
+        signatureCanvas.signatureStrokes = savedStrokes
+    }
+
     private func makeCard() -> UIView {
         let view = UIView()
         view.backgroundColor = AppTheme.surface
@@ -566,6 +688,26 @@ final class Z83EditorViewController: UIViewController {
         })
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        return button
+    }
+
+    private func makeSignatureActionButton(
+        title: String,
+        systemImageName: String,
+        action: Selector
+    ) -> UIButton {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.tinted()
+        configuration.title = title
+        configuration.image = UIImage(systemName: systemImageName)
+        configuration.imagePadding = 6
+        configuration.baseForegroundColor = AppTheme.brand
+        configuration.baseBackgroundColor = AppTheme.brand.withAlphaComponent(0.10)
+        configuration.cornerStyle = .small
+        button.configuration = configuration
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.82
+        button.addTarget(self, action: action, for: .touchUpInside)
         return button
     }
 
