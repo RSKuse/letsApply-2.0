@@ -374,9 +374,9 @@ class JobDetailsViewController: UIViewController {
 
         let emailLabel = applicationDetailLabel(
             title: "Application email",
-            value: job.application.applicationEmail
+            value: job.resolvedApplicationEmail
         )
-        emailLabel.isHidden = job.application.applicationEmail
+        emailLabel.isHidden = job.resolvedApplicationEmail
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
 
@@ -533,7 +533,7 @@ class JobDetailsViewController: UIViewController {
     }
 
     @objc private func copyApplicationEmailTapped() {
-        let email = job.application.applicationEmail
+        let email = job.resolvedApplicationEmail
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !email.isEmpty else { return }
         UIPasteboard.general.string = email

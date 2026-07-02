@@ -4,6 +4,7 @@ from unittest.mock import patch
 from import_dpsa_vacancies import (
     DPSA_NEWSROOM_URL,
     discover_latest_pdf,
+    inject_click_here_links,
     parse_experience,
     parse_jobs,
 )
@@ -96,6 +97,85 @@ DUTIES : Coordinate programme evaluations and prepare management reports.
         self.assertEqual(
             job["application"]["applicationUrl"],
             "https://z83.ngnscan.co.za/login",
+        )
+
+    def test_restores_hidden_click_here_hyperlink(self):
+        text = "APPLICATION : Link: CLICK HERE"
+
+        result = inject_click_here_links(
+            text,
+            ["https://forms.gle/example-post-form"],
+        )
+        job_text = f"""
+ANNEXURE B
+DEPARTMENT OF COMMUNICATIONS AND DIGITAL TECHNOLOGIES
+POST 22/04 : DIRECTOR: DIGITAL SERVICES (REF: DIRDS)
+SALARY : R1 317 384 per annum
+CENTRE : Pretoria
+REQUIREMENTS : A relevant degree and five years of experience.
+DUTIES : Manage digital services.
+{result}
+"""
+        job = parse_jobs(job_text, "https://www.dpsa.gov.za/circular-22.pdf")[0]
+
+        self.assertEqual(
+            job["application"]["applicationUrl"],
+            "https://forms.gle/example-post-form",
+        )
+        self.assertEqual(job["application"]["method"], "governmentWebsite")
+        self.assertTrue(job["verified"])
+
+    def test_post_specific_email_overrides_department_website(self):
+        text = """
+ANNEXURE C
+DEPARTMENT OF PUBLIC WORKS
+APPLICATIONS : Apply online at https://careers.example.gov.za.
+
+POST 22/10 : POLICY ANALYST (REF: PW/10)
+SALARY : R500 000 per annum
+CENTRE : Pretoria
+REQUIREMENTS : Three years of policy experience.
+DUTIES : Analyse policy.
+APPLICATION : Email analyst-applications@example.gov.za.
+"""
+
+        job = parse_jobs(text, "https://www.dpsa.gov.za/circular-22.pdf")[0]
+
+        self.assertEqual(
+            job["application"]["applicationEmail"],
+            "analyst-applications@example.gov.za",
+        )
+        self.assertEqual(job["application"]["method"], "governmentEmail")
+
+    def test_last_post_does_not_inherit_next_annexure_destination(self):
+        text = """
+ANNEXURE B
+DEPARTMENT OF COMMUNICATIONS
+POST 22/11 : DIRECTOR: COMMUNICATIONS (REF: COM/11)
+SALARY : R1 000 000 per annum
+CENTRE : Pretoria
+REQUIREMENTS : Five years of management experience.
+DUTIES : Lead communications.
+APPLICATION : Link: CLICK HERE
+
+ANNEXURE C
+DEPARTMENT OF CORRECTIONAL SERVICES
+APPLICATIONS : Apply online at https://careers.dcs.gov.za/.
+POST 22/12 : ADMINISTRATOR (REF: DCS/12)
+SALARY : R300 000 per annum
+CENTRE : Pretoria
+REQUIREMENTS : Two years of administration experience.
+DUTIES : Provide administration.
+"""
+
+        jobs = parse_jobs(text, "https://www.dpsa.gov.za/circular-22.pdf")
+
+        self.assertEqual(jobs[0]["application"]["applicationUrl"], "")
+        self.assertEqual(jobs[0]["application"]["method"], "governmentManual")
+        self.assertFalse(jobs[0]["verified"])
+        self.assertEqual(
+            jobs[1]["application"]["applicationUrl"],
+            "https://careers.dcs.gov.za/",
         )
 
     @patch("import_dpsa_vacancies.fetch_url")

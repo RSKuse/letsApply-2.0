@@ -558,6 +558,14 @@ class AutoApplyAssistantViewController: UIViewController {
                 self?.openEmailPreview()
             }
         }
+
+        if !didRunDebugAutomation,
+           ProcessInfo.processInfo.environment["LETSAPPLY_DEBUG_CONFIRM_SUBMISSION"] == "1" {
+            didRunDebugAutomation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.approveTapped()
+            }
+        }
         #endif
     }
 
@@ -763,11 +771,18 @@ class AutoApplyAssistantViewController: UIViewController {
                 "Continue"
             )
         case .requiredForm:
-            return (
-                "Prepare Required Form?",
-                "Your CV and cover letter will be available to export before the official application form opens. You remain in control of declarations and signatures.",
-                "Prepare"
-            )
+            let formReady = preparedZ83URL != nil
+            return formReady
+                ? (
+                    "Continue With Manual Application?",
+                    "Your signed Z83, CV, and cover letter are ready. Let’s Apply will show the official instructions and let you share the documents.",
+                    "Continue"
+                )
+                : (
+                    "Complete Required Documents?",
+                    "Prepare and review the required form before continuing with the official application instructions.",
+                    "Continue"
+                )
         case .manual:
             return (
                 "View Employer Instructions?",
@@ -786,9 +801,13 @@ class AutoApplyAssistantViewController: UIViewController {
             }
         case .email:
             openEmailApplication()
-        case .externalPortal, .requiredForm:
+        case .externalPortal:
             saveApplication(status: "ready-to-submit") { [weak self] in
                 self?.showPortalHandoffOptions()
+            }
+        case .requiredForm:
+            saveApplication(status: "requires-manual-action") { [weak self] in
+                self?.showManualInstructions()
             }
         case .manual:
             saveApplication(status: "requires-manual-action") { [weak self] in
@@ -842,7 +861,7 @@ class AutoApplyAssistantViewController: UIViewController {
             let emailDraft = emailDraftParts()
             let composer = MFMailComposeViewController()
             composer.mailComposeDelegate = self
-            composer.setToRecipients([job.application.applicationEmail])
+            composer.setToRecipients([job.resolvedApplicationEmail])
             composer.setSubject(emailDraft.subject ?? "Application for \(job.title)")
             composer.setMessageBody(emailDraft.body ?? "", isHTML: false)
 
@@ -892,7 +911,7 @@ class AutoApplyAssistantViewController: UIViewController {
             let urls = try generatedDocumentURLs()
             let draft = emailDraftParts()
             let preview = EmailApplicationPreviewViewController(
-                recipient: job.application.applicationEmail,
+                recipient: job.resolvedApplicationEmail,
                 subject: draft.subject ?? "Application for \(job.title)",
                 body: draft.body ?? "",
                 attachmentURLs: urls
@@ -1054,29 +1073,17 @@ class AutoApplyAssistantViewController: UIViewController {
         let rawURL = job.resolvedApplicationURLString
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if !rawURL.isEmpty {
-            return URL(string: rawURL)
-        }
-
-        let formText = """
-        \(job.application.formName)
-        \(job.application.requiredForms.joined(separator: " "))
-        \(job.application.requiredDocuments.joined(separator: " "))
-        """
-            .lowercased()
-        if job.application.requiresZ83 || formText.contains("z83") {
-            return URL(string: "https://www.dpsa.gov.za/dpsa2g/documents/vacancies/editable%20Approved%20New%20Z83%20form%20Gazetted%206%20Nov%202020.pdf")
-        }
-
-        return nil
+        return rawURL.isEmpty ? nil : URL(string: rawURL)
     }
 
     private func applicationDestination() -> String? {
         switch job.applicationRoute {
         case .email:
-            return job.application.applicationEmail
-        case .externalPortal, .requiredForm:
+            return job.resolvedApplicationEmail
+        case .externalPortal:
             return applicationDestinationURL()?.absoluteString
+        case .requiredForm:
+            return job.application.applicationInstructions
         case .inApp:
             return "Let’s Apply"
         case .manual:

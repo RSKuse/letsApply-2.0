@@ -112,6 +112,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return UINavigationController(rootViewController: profileViewController)
         }
         if debugScreen == "auto-apply" {
+            let debugApplicationRoute = ProcessInfo.processInfo.environment[
+                "LETSAPPLY_DEBUG_APPLICATION_ROUTE"
+            ] ?? "email"
             let profile = UserProfile(
                 uid: "debug-user",
                 name: "Reuben Kuse",
@@ -179,13 +182,24 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 ),
                 application: JobApplicationInfo(
                     deadline: "19 July 2026",
-                    applicationUrl: "",
-                    applicationEmail: "applications@example.gov.za",
+                    applicationUrl: debugApplicationRoute == "website"
+                        ? "https://forms.gle/example-government-post"
+                        : "",
+                    applicationEmail: debugApplicationRoute == "email"
+                        ? "applications@example.gov.za"
+                        : "",
                     contactPhone: "",
-                    method: "z83",
+                    method: debugApplicationRoute == "website"
+                        ? "governmentWebsite"
+                        : debugApplicationRoute == "manual"
+                            ? "governmentManual"
+                            : "governmentEmail",
                     formName: "Z83 Application for Employment",
                     requiredForms: ["Z83 form"],
                     requiredDocuments: ["Certified ID copy", "Certified qualifications"],
+                    applicationInstructions: debugApplicationRoute == "manual"
+                        ? "Hand deliver the signed Z83 and detailed CV to the department’s recruitment office."
+                        : "",
                     requiresCoverLetter: true,
                     requiresCV: true,
                     requiresZ83: true,

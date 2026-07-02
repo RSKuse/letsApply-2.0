@@ -117,8 +117,63 @@ def extract_pdf_text(pdf_path: Path) -> str:
     pages = []
     for page in reader.pages:
         value = page.extract_text() or ""
+        value = inject_click_here_links(value, external_page_links(page))
         pages.append(normalize_text(value))
     return "\n".join(pages)
+
+
+def external_page_links(page) -> list[str]:
+    annotations_value = page.get("/Annots")
+    if annotations_value is None:
+        return []
+
+    annotations = (
+        annotations_value.get_object()
+        if hasattr(annotations_value, "get_object")
+        else annotations_value
+    )
+    links = []
+    for reference in annotations or []:
+        annotation = reference.get_object()
+        if annotation.get("/Subtype") != "/Link":
+            continue
+
+        action_value = annotation.get("/A")
+        action = (
+            action_value.get_object()
+            if hasattr(action_value, "get_object")
+            else (action_value or {})
+        )
+        uri = str(action.get("/URI") or "").strip()
+        if not uri.lower().startswith(("http://", "https://")):
+            continue
+
+        rect = annotation.get("/Rect") or [0, 0, 0, 0]
+        coordinates = [float(value) for value in rect]
+        top = max(coordinates[1], coordinates[3]) if len(coordinates) >= 4 else 0
+        left = min(coordinates[0], coordinates[2]) if len(coordinates) >= 4 else 0
+        links.append((top, left, uri))
+
+    links.sort(key=lambda value: (-value[0], value[1]))
+    return [value[2] for value in links]
+
+
+def inject_click_here_links(value: str, links: list[str]) -> str:
+    link_iterator = iter(links)
+
+    def replacement(match: re.Match) -> str:
+        try:
+            link = next(link_iterator)
+        except StopIteration:
+            return match.group(0)
+        return f"{match.group(0)} {link}"
+
+    return re.sub(
+        r"\bCLICK\s+HERE\b",
+        replacement,
+        value,
+        flags=re.IGNORECASE,
+    )
 
 
 def normalize_text(value: str) -> str:
@@ -333,7 +388,9 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
     imported_at = datetime.now(timezone.utc).isoformat()
 
     for index, match in enumerate(matches):
-        segment_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        next_post_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        next_annexure = ANNEXURE_PATTERN.search(text, match.end(), next_post_start)
+        segment_end = next_annexure.start() if next_annexure else next_post_start
         segment = text[match.start():segment_end]
         post_number = match.group(1)
         raw_title = match.group(2)
@@ -365,6 +422,11 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
         application_url = (
             first_url(application_text)
             or known_department_portal(department)
+        )
+        unresolved_click_link = (
+            "click here" in application_text.lower()
+            and not application_email
+            and not application_url
         )
         method = application_method(
             application_text,
@@ -434,7 +496,7 @@ def parse_jobs(text: str, source_url: str) -> list[dict]:
                 "sourceJobId": reference,
                 "sourceType": "government",
                 "dateImported": imported_at,
-                "verified": True,
+                "verified": not unresolved_click_link,
                 "publicationStatus": "published",
             }
         )
