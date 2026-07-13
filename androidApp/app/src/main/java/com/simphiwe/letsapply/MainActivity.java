@@ -23,6 +23,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.text.Editable;
 import android.text.TextWatcher;
 
@@ -33,8 +34,10 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class MainActivity extends Activity {
     private static final int GREEN = Color.rgb(11, 127, 80);
@@ -50,6 +53,7 @@ public final class MainActivity extends Activity {
 
     private final JobRepository repository = new JobRepository();
     private FirestoreJobRepository firestoreRepository;
+    private FirestoreUserRepository userRepository;
     private SharedPreferences preferences;
 
     private LinearLayout root;
@@ -67,12 +71,16 @@ public final class MainActivity extends Activity {
         preferences = getSharedPreferences("lets_apply_android", MODE_PRIVATE);
         guestMode = !profileExists();
         firestoreRepository = new FirestoreJobRepository(this);
-        fetchJobs();
+        userRepository = new FirestoreUserRepository(this);
         if (profileExists()) {
             showMain("Home");
         } else {
             showOnboarding();
         }
+        root.postDelayed(() -> {
+            fetchJobs();
+            fetchRemoteProfile();
+        }, 2000);
     }
 
     private void styleSystemBars() {
@@ -97,6 +105,49 @@ public final class MainActivity extends Activity {
                 // Local preview jobs remain available while Firebase setup is being completed.
             }
         });
+    }
+
+    private void fetchRemoteProfile() {
+        if (userRepository == null || profileExists()) {
+            return;
+        }
+
+        userRepository.fetchProfile(new FirestoreUserRepository.ProfileCallback() {
+            @Override
+            public void onProfileLoaded(Map<String, Object> profile) {
+                runOnUiThread(() -> {
+                    SharedPreferences.Editor editor = preferences.edit();
+                    putProfileString(editor, profile, "name");
+                    putProfileString(editor, profile, "email");
+                    putProfileString(editor, profile, "phone");
+                    putProfileString(editor, profile, "location");
+                    putProfileString(editor, profile, "jobTitle");
+                    putProfileString(editor, profile, "summary");
+                    putProfileString(editor, profile, "skills");
+                    putProfileString(editor, profile, "experience");
+                    putProfileString(editor, profile, "education");
+                    putProfileString(editor, profile, "certificates");
+                    putProfileString(editor, profile, "references");
+                    editor.putBoolean("profile.exists", true).apply();
+                    guestMode = false;
+                    if (content != null) {
+                        showMain(currentTab);
+                    }
+                });
+            }
+
+            @Override
+            public void onProfileUnavailable(String message) {
+                // A missing remote profile is normal for first-time Android testers.
+            }
+        });
+    }
+
+    private void putProfileString(SharedPreferences.Editor editor, Map<String, Object> profile, String key) {
+        Object value = profile.get(key);
+        if (value != null) {
+            editor.putString("profile." + key, String.valueOf(value));
+        }
     }
 
     private void showOnboarding() {
@@ -538,11 +589,39 @@ public final class MainActivity extends Activity {
                     .putBoolean("profile.exists", true)
                     .apply();
             guestMode = false;
+            syncProfileToFirebase();
             showMain("Profile");
         });
         LinearLayout.LayoutParams saveParams = matchHeight(dp(58));
         saveParams.setMargins(0, dp(10), 0, dp(18));
         content.addView(save, saveParams);
+    }
+
+    private void syncProfileToFirebase() {
+        if (userRepository == null || !profileExists()) {
+            return;
+        }
+
+        Map<String, Object> profile = new HashMap<>();
+        profile.put("name", getProfile("name", ""));
+        profile.put("email", getProfile("email", ""));
+        profile.put("phone", getProfile("phone", ""));
+        profile.put("location", getProfile("location", ""));
+        profile.put("jobTitle", getProfile("jobTitle", ""));
+        profile.put("summary", getProfile("summary", ""));
+        profile.put("skills", getProfile("skills", ""));
+        profile.put("experience", getProfile("experience", ""));
+        profile.put("education", getProfile("education", ""));
+        profile.put("certificates", getProfile("certificates", ""));
+        profile.put("references", getProfile("references", ""));
+        profile.put("isPremium", false);
+        profile.put("isComplete", isProfileComplete());
+
+        userRepository.saveProfile(profile, (success, message) -> runOnUiThread(() -> {
+            if (success) {
+                toast("Profile synced to Firebase.");
+            }
+        }));
     }
 
     private void showCVStudio() {
@@ -634,6 +713,7 @@ public final class MainActivity extends Activity {
                 .setView(field)
                 .setPositiveButton("Save", (dialog, which) -> {
                     preferences.edit().putString("profile." + key, value(field)).apply();
+                    syncProfileToFirebase();
                     onSaved.run();
                 })
                 .setNegativeButton("Cancel", null)
@@ -1325,7 +1405,7 @@ public final class MainActivity extends Activity {
         trackApplication(job, "Submitted inside Let’s Apply", cvText, coverLetter, applicationEmail);
         new AlertDialog.Builder(this)
                 .setTitle("Application submitted")
-                .setMessage("This vacancy has been recorded in My Applications. Firebase application sync will come in the next Android phase.")
+                .setMessage("This vacancy has been recorded in My Applications and will sync with Firebase when the device is online.")
                 .setPositiveButton("OK", null)
                 .show();
     }
@@ -1692,6 +1772,14 @@ public final class MainActivity extends Activity {
             keys.remove(key);
         }
         saveStringList("savedJobs", keys);
+
+        if (userRepository != null && profileExists()) {
+            userRepository.saveSavedJob(job, saved, (success, message) -> runOnUiThread(() -> {
+                if (!success && message != null && !message.trim().isEmpty()) {
+                    toast("Saved locally. Firebase sync pending.");
+                }
+            }));
+        }
     }
 
     private String jobKey(Job job) {
@@ -1757,6 +1845,7 @@ public final class MainActivity extends Activity {
                 } catch (JSONException ignored) {
                 }
                 saveArray("applications", applications);
+                syncApplicationToFirebase(job, status, cvText, coverLetter, emailDraft);
                 return;
             }
         }
@@ -1780,6 +1869,27 @@ public final class MainActivity extends Activity {
         }
         applications.put(item);
         saveArray("applications", applications);
+        syncApplicationToFirebase(job, status, cvText, coverLetter, emailDraft);
+    }
+
+    private void syncApplicationToFirebase(Job job, String status, String cvText, String coverLetter, String emailDraft) {
+        if (userRepository == null || !profileExists()) {
+            return;
+        }
+
+        userRepository.saveApplication(
+                job,
+                status,
+                cvText,
+                coverLetter,
+                emailDraft,
+                matchScore(job),
+                (success, message) -> runOnUiThread(() -> {
+                    if (!success && message != null && !message.trim().isEmpty()) {
+                        toast("Application saved locally. Firebase sync pending.");
+                    }
+                })
+        );
     }
 
     private String today() {
@@ -1814,6 +1924,9 @@ public final class MainActivity extends Activity {
                 .setMessage("This removes the application from this Android device.")
                 .setPositiveButton("Delete", (dialog, which) -> {
                     JSONArray oldItems = loadArray("applications");
+                    JSONObject deleted = index >= 0 && index < oldItems.length()
+                            ? oldItems.optJSONObject(index)
+                            : null;
                     JSONArray newItems = new JSONArray();
                     for (int i = 0; i < oldItems.length(); i++) {
                         if (i != index) {
@@ -1824,10 +1937,32 @@ public final class MainActivity extends Activity {
                         }
                     }
                     saveArray("applications", newItems);
+                    deleteRemoteApplication(deleted);
                     renderApplications();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void deleteRemoteApplication(JSONObject item) {
+        if (item == null || userRepository == null) {
+            return;
+        }
+
+        String key = item.optString("jobKey", "");
+        if (key.isEmpty()) {
+            return;
+        }
+
+        userRepository.deleteApplication(key, (success, message) -> runOnUiThread(() -> {
+            if (!success && message != null && !message.trim().isEmpty()) {
+                toast("Deleted locally. Firebase delete pending.");
+            }
+        }));
+    }
+
+    private void toast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     private TextView label(String text, int sp, int color, int style) {
