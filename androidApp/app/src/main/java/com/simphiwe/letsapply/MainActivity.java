@@ -190,6 +190,7 @@ public final class MainActivity extends Activity {
         addNavItem(nav, "Home", tab);
         addNavItem(nav, "Jobs", tab);
         addNavItem(nav, "Profile", tab);
+        nav.bringToFront();
 
         if ("Jobs".equals(tab)) {
             renderJobs();
@@ -206,14 +207,23 @@ public final class MainActivity extends Activity {
         scroll.setFillViewport(false);
         scroll.setClipToPadding(false);
         content = vertical();
-        content.setPadding(dp(horizontalPadding), dp(topPadding), dp(horizontalPadding), dp(bottomPadding));
+        content.setPadding(dp(horizontalPadding), dp(topPadding), dp(horizontalPadding), dp(bottomPadding + 92));
         scroll.addView(content, matchWrap());
-        screenFrame.addView(scroll);
+        screenFrame.addView(
+                scroll,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                )
+        );
     }
 
     private void addNavItem(LinearLayout nav, String title, String current) {
         TextView item = label(title, 15, title.equals(current) ? GREEN : INK, Typeface.BOLD);
         item.setGravity(Gravity.CENTER);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setPadding(dp(4), 0, dp(4), 0);
         item.setBackground(title.equals(current) ? rounded(Color.rgb(232, 236, 234), 32) : null);
         item.setOnClickListener(view -> showMain(title));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
@@ -395,7 +405,7 @@ public final class MainActivity extends Activity {
     }
 
     private void addGridCard(LinearLayout row, Job job, boolean left) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(260), 1);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(320), 1);
         params.setMargins(left ? 0 : dp(6), 0, left ? dp(6) : 0, 0);
         row.addView(jobCard(job, true), params);
     }
@@ -444,7 +454,7 @@ public final class MainActivity extends Activity {
         });
         content.addView(create, matchHeight(dp(58)));
 
-        addProfileAction("CV Studio", "Build a clean CV, references, certificates, and job-ready sections.", () -> showFeatureComingSoon("CV Studio"));
+        addProfileAction("CV Studio", "Build a clean CV, references, certificates, and job-ready sections.", this::showCVStudio);
         addProfileAction("My Applications", "Track submitted, email, website, and government applications.", this::renderApplications);
         addProfileAction("Saved Jobs", "Keep vacancies ready for later review.", this::renderSavedJobs);
     }
@@ -535,6 +545,167 @@ public final class MainActivity extends Activity {
         content.addView(save, saveParams);
     }
 
+    private void showCVStudio() {
+        if (!profileExists()) {
+            showCreateProfilePrompt();
+            return;
+        }
+
+        setScrollableContent(20, 30, 34);
+
+        TextView back = label("< Profile", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showMain("Profile"));
+        content.addView(back, matchWrap());
+
+        TextView title = label("CV Studio", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        addDetailsSection("Contact Details", contactDetails());
+
+        addCVStudioSection(
+                "Professional Summary",
+                getProfile("summary", "Add a focused summary that tells employers who you are and what value you bring."),
+                () -> editProfileBlock("Professional Summary", "summary", "Write a clear professional summary.", this::showCVStudio)
+        );
+
+        addCVStudioSection(
+                "Work Experience",
+                getProfile("experience", "Add your roles, responsibilities, and achievements."),
+                () -> editProfileBlock("Work Experience", "experience", "Example: Assessment Lead, Regent Business School - managed academic assessment processes and reporting.", this::showCVStudio)
+        );
+
+        addCVStudioSection(
+                "Education",
+                getProfile("education", "Add degrees, diplomas, institutions, and dates."),
+                () -> editProfileBlock("Education", "education", "Example: BSc Computer Science, University of Cape Town.", this::showCVStudio)
+        );
+
+        addCVStudioSection(
+                "Certificates Acquired",
+                getProfile("certificates", "Add certificates, short courses, licenses, and professional training."),
+                () -> editProfileBlock("Certificates Acquired", "certificates", "Example: AWS Certificate; Project Management Certificate.", this::showCVStudio)
+        );
+
+        addCVStudioSection(
+                "References",
+                getProfile("references", "Add up to three references or write: Available on request."),
+                () -> editProfileBlock("References", "references", "Reference 1: Name, role, organisation, email, phone.", this::showCVStudio)
+        );
+
+        TextView preview = button("Preview CV", GREEN, Color.WHITE);
+        preview.setOnClickListener(view -> showCVPreview());
+        LinearLayout.LayoutParams previewParams = matchHeight(dp(60));
+        previewParams.setMargins(0, dp(8), 0, dp(16));
+        content.addView(preview, previewParams);
+    }
+
+    private void addCVStudioSection(String title, String body, Runnable action) {
+        LinearLayout card = vertical();
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(card);
+        card.setOnClickListener(view -> action.run());
+
+        TextView heading = label(title, 22, INK, Typeface.BOLD);
+        card.addView(heading, matchWrap());
+
+        TextView text = label(body == null || body.trim().isEmpty() ? "Tap to add details." : body.trim(), 16, MUTED, Typeface.BOLD);
+        text.setMaxLines(4);
+        LinearLayout.LayoutParams textParams = matchWrap();
+        textParams.setMargins(0, dp(8), 0, dp(12));
+        card.addView(text, textParams);
+
+        TextView edit = label("Edit", 15, GREEN, Typeface.BOLD);
+        edit.setGravity(Gravity.RIGHT);
+        card.addView(edit, matchWrap());
+
+        content.addView(card, cardParams());
+    }
+
+    private void editProfileBlock(String title, String key, String hint, Runnable onSaved) {
+        EditText field = input(hint, getProfile(key, ""), 6);
+        field.setMinLines(6);
+        field.setSelection(field.getText() == null ? 0 : field.getText().length());
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(field)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    preferences.edit().putString("profile." + key, value(field)).apply();
+                    onSaved.run();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showCVPreview() {
+        setScrollableContent(20, 30, 34);
+
+        TextView back = label("< CV Studio", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showCVStudio());
+        content.addView(back, matchWrap());
+
+        TextView title = label("CV Preview", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        addDetailsSection("Candidate CV", cvDraft(null));
+
+        TextView copy = button("Copy CV Text", MINT, GREEN);
+        copy.setOnClickListener(view -> copyToClipboard("CV Draft", cvDraft(null)));
+        content.addView(copy, matchHeight(dp(56)));
+    }
+
+    private String contactDetails() {
+        StringBuilder builder = new StringBuilder();
+        appendLine(builder, getProfile("name", ""));
+        appendLine(builder, getProfile("jobTitle", ""));
+        appendLine(builder, getProfile("email", ""));
+        appendLine(builder, getProfile("phone", ""));
+        appendLine(builder, getProfile("location", ""));
+        return builder.length() == 0 ? "Complete your profile contact details." : builder.toString().trim();
+    }
+
+    private String cvDraft(Job job) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(contactDetails());
+
+        appendSection(builder, "Professional Summary", getProfile("summary", ""));
+        appendSection(builder, "Core Skills", getProfile("skills", ""));
+        appendSection(builder, "Work Experience", getProfile("experience", "Add work experience in CV Studio."));
+        appendSection(builder, "Education", getProfile("education", "Add education in CV Studio."));
+        appendSection(builder, "Certificates Acquired", getProfile("certificates", "Add certificates in CV Studio."));
+        appendSection(builder, "References", getProfile("references", "Available on request."));
+
+        if (job != null) {
+            appendSection(
+                    builder,
+                    "Tailored Focus",
+                    "For this " + job.title + " application, emphasise " + roleFocus(job) + "."
+            );
+        }
+
+        return builder.toString().trim();
+    }
+
+    private void appendSection(StringBuilder builder, String heading, String value) {
+        String cleaned = value == null ? "" : value.trim();
+        if (cleaned.isEmpty()) {
+            return;
+        }
+        builder.append("\n\n").append(heading.toUpperCase(Locale.ROOT)).append("\n").append(cleaned);
+    }
+
+    private void appendLine(StringBuilder builder, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            builder.append(value.trim()).append("\n");
+        }
+    }
+
     private void renderApplications() {
         setScrollableContent(20, 30, 34);
 
@@ -593,6 +764,15 @@ public final class MainActivity extends Activity {
         copy.setBackground(rounded(MINT, 20));
         copy.setOnClickListener(view -> copyToClipboard("Application", applicationSummary(item)));
         actions.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView share = label("Share docs", 15, GREEN, Typeface.BOLD);
+        share.setGravity(Gravity.CENTER);
+        share.setPadding(dp(14), dp(10), dp(14), dp(10));
+        share.setBackground(rounded(MINT, 20));
+        share.setOnClickListener(view -> shareStoredApplication(item));
+        LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        shareParams.setMargins(dp(10), 0, 0, 0);
+        actions.addView(share, shareParams);
 
         TextView delete = label("Delete", 15, Color.rgb(210, 54, 54), Typeface.BOLD);
         delete.setGravity(Gravity.CENTER);
@@ -708,8 +888,11 @@ public final class MainActivity extends Activity {
         setScrollableContent(20, 30, 30);
 
         TextView back = label("< Jobs", 17, GREEN, Typeface.BOLD);
+        back.setGravity(Gravity.CENTER_VERTICAL);
+        back.setPadding(dp(16), 0, dp(16), 0);
+        back.setBackground(rounded(Color.WHITE, 24));
         back.setOnClickListener(view -> showMain("Jobs"));
-        content.addView(back, matchWrap());
+        content.addView(back, new LinearLayout.LayoutParams(dp(116), dp(52)));
 
         LinearLayout hero = vertical();
         hero.setPadding(dp(20), dp(22), dp(20), dp(22));
@@ -811,15 +994,31 @@ public final class MainActivity extends Activity {
         applyCardStyle(score);
         content.addView(score, cardParams());
 
+        String tailoredCv = cvDraft(job);
         String coverLetter = coverLetterDraft(job);
-        addDetailsSection("Editable Cover Letter", coverLetter);
+        String applicationEmail = emailDraft(job);
 
-        TextView copy = button("Copy Cover Letter", MINT, GREEN);
+        addDetailsSection("Tailored CV Draft", tailoredCv);
+        addDetailsSection("Editable Cover Letter", coverLetter);
+        addDetailsSection("Editable Application Email", applicationEmail);
+
+        LinearLayout documentActions = horizontal();
+        LinearLayout.LayoutParams documentActionParams = matchWrap();
+        documentActionParams.setMargins(0, 0, 0, dp(12));
+        content.addView(documentActions, documentActionParams);
+
+        TextView copy = button("Copy Letter", MINT, GREEN);
         copy.setOnClickListener(view -> copyToClipboard("Cover Letter", coverLetter));
-        content.addView(copy, matchHeight(dp(56)));
+        documentActions.addView(copy, new LinearLayout.LayoutParams(0, dp(56), 1));
+
+        TextView share = button("Share Docs", MINT, GREEN);
+        share.setOnClickListener(view -> shareApplicationDocuments(job, tailoredCv, coverLetter, applicationEmail));
+        LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(0, dp(56), 1);
+        shareParams.setMargins(dp(10), 0, 0, 0);
+        documentActions.addView(share, shareParams);
 
         TextView submit = button("Submit Application", GREEN, Color.WHITE);
-        submit.setOnClickListener(view -> routeApplication(job));
+        submit.setOnClickListener(view -> routeApplication(job, tailoredCv, coverLetter, applicationEmail));
         LinearLayout.LayoutParams submitParams = matchHeight(dp(62));
         submitParams.setMargins(0, dp(18), 0, dp(18));
         content.addView(submit, submitParams);
@@ -908,23 +1107,23 @@ public final class MainActivity extends Activity {
                 .append(profileIdentity)
                 .append(" ");
 
-        letter.append("This opportunity interests me because the role calls for ")
+        letter.append("I am interested in this opportunity because the role requires ")
                 .append(roleFocus)
-                .append(", and those are areas where I can contribute with preparation, accuracy, and professional judgement.")
+                .append(", which are closely aligned with the way I approach professional work.")
                 .append("\n\n");
 
-        letter.append("In my work, I have learned to read requirements closely, organise information into usable outputs, communicate clearly with different stakeholders, and complete tasks with accountability. ");
+        letter.append("My experience has taught me to interpret requirements carefully, organise complex information into clear outputs, and communicate in a way that supports responsible decision-making. ");
         if (!skills.isEmpty()) {
-            letter.append("My profile also reflects strengths in ")
+            letter.append("My profile reflects strengths in ")
                     .append(skills)
-                    .append(", which I would apply to the duties described in the advertisement. ");
+                    .append(", and I would apply those strengths directly to the duties described in the advertisement. ");
         }
-        letter.append("I have considered the vacancy requirements carefully and would approach the post with the seriousness expected by ")
+        letter.append("I have considered the vacancy requirements carefully and would approach the post with the seriousness, accuracy, and accountability expected by ")
                 .append(employer)
                 .append(".")
                 .append("\n\n");
 
-        letter.append("I would welcome the opportunity to be considered for this role and to discuss how my experience can support the priorities of the post. Thank you for your time and consideration.")
+        letter.append("I would welcome the opportunity to contribute to this role and to discuss how my background can support the priorities of the post. Thank you for considering my application.")
                 .append("\n\n")
                 .append("Kind regards");
 
@@ -1101,25 +1300,29 @@ public final class MainActivity extends Activity {
     }
 
     private void routeApplication(Job job) {
+        routeApplication(job, cvDraft(job), coverLetterDraft(job), emailDraft(job));
+    }
+
+    private void routeApplication(Job job, String cvText, String coverLetter, String applicationEmail) {
         if (isEmailMethod(job)) {
-            trackApplication(job, "Email draft prepared");
-            openEmailApplication(job);
+            trackApplication(job, "Email draft prepared", cvText, coverLetter, applicationEmail);
+            openEmailApplication(job, applicationEmail, coverLetter, cvText);
             return;
         }
 
         if (isWebsiteMethod(job)) {
-            trackApplication(job, "Website application prepared");
-            openApplicationWebsite(job);
+            trackApplication(job, "Website application prepared", cvText, coverLetter, applicationEmail);
+            showWebsiteApplicationHandoff(job, cvText, coverLetter, applicationEmail);
             return;
         }
 
         if ("manualInstruction".equals(job.method) || "governmentManual".equals(job.method)) {
-            trackApplication(job, "Manual action required");
+            trackApplication(job, "Manual action required", cvText, coverLetter, applicationEmail);
             showManualInstructions(job);
             return;
         }
 
-        trackApplication(job, "Submitted inside Let’s Apply");
+        trackApplication(job, "Submitted inside Let’s Apply", cvText, coverLetter, applicationEmail);
         new AlertDialog.Builder(this)
                 .setTitle("Application submitted")
                 .setMessage("This vacancy has been recorded in My Applications. Firebase application sync will come in the next Android phase.")
@@ -1128,13 +1331,21 @@ public final class MainActivity extends Activity {
     }
 
     private void openEmailApplication(Job job) {
+        openEmailApplication(job, emailDraft(job), coverLetterDraft(job), cvDraft(job));
+    }
+
+    private void openEmailApplication(Job job, String emailBody, String coverLetter, String cvText) {
         if (job.applicationEmail == null || job.applicationEmail.trim().isEmpty()) {
             showMissingApplicationContact(job);
             return;
         }
 
         String subject = "Application: " + job.title + referenceSuffix(job);
-        String body = emailDraft(job);
+        String body = emailBody
+                + "\n\n--- Cover Letter ---\n"
+                + coverLetter
+                + "\n\n--- CV Draft ---\n"
+                + cvText;
 
         Intent intent = new Intent(Intent.ACTION_SENDTO);
         intent.setData(Uri.parse("mailto:" + Uri.encode(job.applicationEmail.trim())));
@@ -1149,6 +1360,16 @@ public final class MainActivity extends Activity {
         startActivity(intent);
     }
 
+    private void showWebsiteApplicationHandoff(Job job, String cvText, String coverLetter, String applicationEmail) {
+        new AlertDialog.Builder(this)
+                .setTitle("Open employer website?")
+                .setMessage("Your CV draft, cover letter, and application email are prepared. Share or copy them first if you need to attach them on the employer website.")
+                .setPositiveButton("Open Website", (dialog, which) -> openApplicationWebsite(job))
+                .setNeutralButton("Share Docs", (dialog, which) -> shareApplicationDocuments(job, cvText, coverLetter, applicationEmail))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private String emailDraft(Job job) {
         String greeting = isGovernmentMethod(job) ? "Dear Selection Committee," : "Dear Hiring Manager,";
         String applicantName = getProfile("name", "");
@@ -1159,7 +1380,8 @@ public final class MainActivity extends Activity {
                 .append(job.title)
                 .append(" position")
                 .append(referenceSuffix(job))
-                .append(". I have prepared my CV, cover letter, and the required supporting documents for your consideration.")
+                .append(". I have prepared my CV, cover letter, and the required supporting documents for your consideration. ")
+                .append("I would appreciate the opportunity to be considered for this post.")
                 .append("\n\n")
                 .append("Kind regards");
 
@@ -1168,6 +1390,26 @@ public final class MainActivity extends Activity {
         }
 
         return draft.toString();
+    }
+
+    private void shareApplicationDocuments(Job job, String cvText, String coverLetter, String applicationEmail) {
+        String subject = "Application: " + job.title + referenceSuffix(job);
+        String text = "Application package prepared by Let's Apply\n\n"
+                + "Job: " + job.title + "\n"
+                + "Employer: " + job.company + "\n"
+                + "Reference: " + referenceValue(job) + "\n\n"
+                + "APPLICATION EMAIL\n"
+                + applicationEmail + "\n\n"
+                + "COVER LETTER\n"
+                + coverLetter + "\n\n"
+                + "CV DRAFT\n"
+                + cvText;
+
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+        intent.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(Intent.createChooser(intent, "Share application documents"));
     }
 
     private void openApplicationWebsite(Job job) {
@@ -1269,7 +1511,7 @@ public final class MainActivity extends Activity {
         content.addView(scroller, matchWrap());
 
         for (int index = 0; index < jobs.size() && index < limit; index++) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(245), dp(245));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(265), dp(300));
             params.setMargins(0, 0, dp(12), dp(22));
             row.addView(jobCard(jobs.get(index), false), params);
         }
@@ -1493,6 +1735,10 @@ public final class MainActivity extends Activity {
     }
 
     private void trackApplication(Job job, String status) {
+        trackApplication(job, status, cvDraft(job), coverLetterDraft(job), emailDraft(job));
+    }
+
+    private void trackApplication(Job job, String status, String cvText, String coverLetter, String emailDraft) {
         JSONArray applications = loadArray("applications");
         String key = jobKey(job);
 
@@ -1504,6 +1750,10 @@ public final class MainActivity extends Activity {
                 try {
                     existing.put("status", status);
                     existing.put("date", today());
+                    existing.put("cvDraft", cvText == null ? "" : cvText);
+                    existing.put("coverLetter", coverLetter == null ? "" : coverLetter);
+                    existing.put("emailDraft", emailDraft == null ? "" : emailDraft);
+                    existing.put("matchScore", matchScore(job));
                 } catch (JSONException ignored) {
                 }
                 saveArray("applications", applications);
@@ -1522,6 +1772,10 @@ public final class MainActivity extends Activity {
             item.put("reference", referenceValue(job));
             item.put("email", job.applicationEmail == null ? "" : job.applicationEmail);
             item.put("url", job.applicationUrl == null ? "" : job.applicationUrl);
+            item.put("cvDraft", cvText == null ? "" : cvText);
+            item.put("coverLetter", coverLetter == null ? "" : coverLetter);
+            item.put("emailDraft", emailDraft == null ? "" : emailDraft);
+            item.put("matchScore", matchScore(job));
         } catch (JSONException ignored) {
         }
         applications.put(item);
@@ -1539,7 +1793,19 @@ public final class MainActivity extends Activity {
                 + "Date: " + item.optString("date", "") + "\n"
                 + "Reference: " + item.optString("reference", "") + "\n"
                 + "Email: " + item.optString("email", "") + "\n"
-                + "Link: " + item.optString("url", "");
+                + "Link: " + item.optString("url", "") + "\n"
+                + "Match: " + item.optInt("matchScore", 0) + "%\n\n"
+                + "Cover Letter\n" + item.optString("coverLetter", "") + "\n\n"
+                + "Application Email\n" + item.optString("emailDraft", "") + "\n\n"
+                + "CV Draft\n" + item.optString("cvDraft", "");
+    }
+
+    private void shareStoredApplication(JSONObject item) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Application: " + item.optString("title", "Let’s Apply"));
+        intent.putExtra(Intent.EXTRA_TEXT, applicationSummary(item));
+        startActivity(Intent.createChooser(intent, "Share application"));
     }
 
     private void confirmDeleteApplication(int index) {
