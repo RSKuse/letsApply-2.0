@@ -93,8 +93,10 @@ final class JobRepository {
 
             boolean matchesFilter = "All".equals(normalizedFilter)
                     || ("Remote".equals(normalizedFilter) && job.remote)
+                    || ("Hybrid".equals(normalizedFilter) && job.type.toLowerCase(Locale.ROOT).contains("hybrid"))
                     || ("Featured".equals(normalizedFilter) && job.featured)
                     || ("Government".equals(normalizedFilter) && job.method.startsWith("government"))
+                    || ("Public Service".equals(normalizedFilter) && job.method.startsWith("government"))
                     || ("Permanent".equals(normalizedFilter) && job.type.equalsIgnoreCase("Permanent"))
                     || ("Contract".equals(normalizedFilter) && job.type.equalsIgnoreCase("Contract"));
 
