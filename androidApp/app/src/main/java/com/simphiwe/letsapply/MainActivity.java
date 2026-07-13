@@ -6,6 +6,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -25,6 +26,13 @@ import android.widget.TextView;
 import android.text.Editable;
 import android.text.TextWatcher;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -42,6 +50,7 @@ public final class MainActivity extends Activity {
 
     private final JobRepository repository = new JobRepository();
     private FirestoreJobRepository firestoreRepository;
+    private SharedPreferences preferences;
 
     private LinearLayout root;
     private FrameLayout screenFrame;
@@ -55,9 +64,15 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         styleSystemBars();
+        preferences = getSharedPreferences("lets_apply_android", MODE_PRIVATE);
+        guestMode = !profileExists();
         firestoreRepository = new FirestoreJobRepository(this);
         fetchJobs();
-        showOnboarding();
+        if (profileExists()) {
+            showMain("Home");
+        } else {
+            showOnboarding();
+        }
     }
 
     private void styleSystemBars() {
@@ -105,6 +120,9 @@ public final class MainActivity extends Activity {
         signIn.setOnClickListener(view -> {
             guestMode = false;
             showMain("Profile");
+            if (!profileExists()) {
+                showProfileEditor();
+            }
         });
         header.addView(signIn, wrapWrap());
 
@@ -131,7 +149,8 @@ public final class MainActivity extends Activity {
         TextView createProfile = button("Create Profile", GREEN, Color.WHITE);
         createProfile.setOnClickListener(view -> {
             guestMode = false;
-            showMain("Home");
+            showMain("Profile");
+            showProfileEditor();
         });
         root.addView(createProfile, matchHeight(dp(58)));
 
@@ -384,7 +403,7 @@ public final class MainActivity extends Activity {
     private void renderProfile() {
         setScrollableContent(22, 30, 34);
 
-        TextView title = label(guestMode ? "Complete Profile" : "Profile", 28, INK, Typeface.BOLD);
+        TextView title = label(profileExists() ? "Profile" : "Complete Profile", 28, INK, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         content.addView(title, matchWrap());
 
@@ -402,9 +421,12 @@ public final class MainActivity extends Activity {
         header.addView(avatar, new LinearLayout.LayoutParams(dp(76), dp(76)));
 
         TextView profile = label(
-                guestMode
+                !profileExists()
                         ? "Guest profile\nCreate a profile to save jobs, generate documents, and apply."
-                        : "Reuben Simphiwe Kuse\nSoftware Developer\nDurban\nProfile 100% complete",
+                        : getProfile("name", "Candidate") + "\n"
+                        + getProfile("jobTitle", "Desired role") + "\n"
+                        + getProfile("location", "Location") + "\n"
+                        + profileCompletionText(),
                 20,
                 INK,
                 Typeface.BOLD
@@ -415,39 +437,228 @@ public final class MainActivity extends Activity {
 
         addProfileStatusCard();
 
-        TextView create = button(guestMode ? "Create Profile" : "Edit Profile", GREEN, Color.WHITE);
+        TextView create = button(profileExists() ? "Edit Profile" : "Create Profile", GREEN, Color.WHITE);
         create.setOnClickListener(view -> {
             guestMode = false;
-            showMain("Profile");
+            showProfileEditor();
         });
         content.addView(create, matchHeight(dp(58)));
 
-        addProfileAction("CV Studio", "Build a clean CV, references, certificates, and job-ready sections.");
-        addProfileAction("My Applications", "Track submitted, email, website, and government applications.");
-        addProfileAction("Saved Jobs", "Keep vacancies ready for later review.");
+        addProfileAction("CV Studio", "Build a clean CV, references, certificates, and job-ready sections.", () -> showFeatureComingSoon("CV Studio"));
+        addProfileAction("My Applications", "Track submitted, email, website, and government applications.", this::renderApplications);
+        addProfileAction("Saved Jobs", "Keep vacancies ready for later review.", this::renderSavedJobs);
     }
 
     private void addProfileStatusCard() {
         TextView status = label(
-                guestMode
+                !profileExists()
                         ? "Profile locked\nCreate your profile once. Let the app reuse it for applications."
-                        : "Profile 100% complete\nYou can apply now. Android document generation is being upgraded to match iOS.",
+                        : profileCompletionText() + "\n" + (isProfileComplete()
+                        ? "You can apply now. Android document generation is being upgraded to match iOS."
+                        : "Complete your name, email, location, job title, summary, and skills to unlock applications."),
                 18,
-                guestMode ? ORANGE : DARK_GREEN,
+                !profileExists() || !isProfileComplete() ? ORANGE : DARK_GREEN,
                 Typeface.BOLD
         );
         status.setPadding(dp(18), dp(18), dp(18), dp(18));
-        status.setBackground(rounded(guestMode ? AMBER : MINT, 16));
+        status.setBackground(rounded(!profileExists() || !isProfileComplete() ? AMBER : MINT, 16));
         LinearLayout.LayoutParams params = cardParams();
         params.setMargins(0, 0, 0, dp(20));
         content.addView(status, params);
     }
 
-    private void addProfileAction(String title, String subtitle) {
-        TextView action = label(title + "\n" + subtitle, 18, INK, Typeface.BOLD);
-        action.setPadding(dp(18), dp(18), dp(18), dp(18));
-        applyCardStyle(action);
-        content.addView(action, cardParams());
+    private void addProfileAction(String title, String subtitle, Runnable action) {
+        TextView row = label(title + "\n" + subtitle, 18, INK, Typeface.BOLD);
+        row.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(row);
+        row.setOnClickListener(view -> action.run());
+        content.addView(row, cardParams());
+    }
+
+    private void showProfileEditor() {
+        currentTab = "Profile";
+        setScrollableContent(22, 30, 34);
+
+        TextView back = label("< Profile", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showMain("Profile"));
+        content.addView(back, matchWrap());
+
+        TextView title = label("Build Your Profile", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        TextView intro = label(
+                "Complete this once. Let’s Apply will reuse it for matching, CV drafts, cover letters, and application routing.",
+                17,
+                MUTED,
+                Typeface.BOLD
+        );
+        intro.setPadding(dp(18), dp(18), dp(18), dp(18));
+        intro.setBackground(rounded(MINT, 16));
+        content.addView(intro, cardParams());
+
+        EditText name = input("Full name", getProfile("name", ""), 1);
+        EditText email = input("Email address", getProfile("email", ""), 1);
+        EditText phone = input("Phone number", getProfile("phone", ""), 1);
+        EditText location = input("Location", getProfile("location", ""), 1);
+        EditText jobTitle = input("Desired job title", getProfile("jobTitle", ""), 1);
+        EditText summary = input("Professional summary", getProfile("summary", ""), 5);
+        EditText skills = input("Skills and keywords", getProfile("skills", ""), 4);
+
+        content.addView(name, inputParams(1));
+        content.addView(email, inputParams(1));
+        content.addView(phone, inputParams(1));
+        content.addView(location, inputParams(1));
+        content.addView(jobTitle, inputParams(1));
+        content.addView(summary, inputParams(5));
+        content.addView(skills, inputParams(4));
+
+        TextView save = button("Save Profile", GREEN, Color.WHITE);
+        save.setOnClickListener(view -> {
+            preferences.edit()
+                    .putString("profile.name", value(name))
+                    .putString("profile.email", value(email))
+                    .putString("profile.phone", value(phone))
+                    .putString("profile.location", value(location))
+                    .putString("profile.jobTitle", value(jobTitle))
+                    .putString("profile.summary", value(summary))
+                    .putString("profile.skills", value(skills))
+                    .putBoolean("profile.exists", true)
+                    .apply();
+            guestMode = false;
+            showMain("Profile");
+        });
+        LinearLayout.LayoutParams saveParams = matchHeight(dp(58));
+        saveParams.setMargins(0, dp(10), 0, dp(18));
+        content.addView(save, saveParams);
+    }
+
+    private void renderApplications() {
+        setScrollableContent(20, 30, 34);
+
+        TextView back = label("< Profile", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showMain("Profile"));
+        content.addView(back, matchWrap());
+
+        TextView title = label("Applications", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        JSONArray applications = loadArray("applications");
+        if (applications.length() == 0) {
+            TextView empty = label("No applications yet.\n\nWhen you submit or prepare a vacancy, it will appear here.", 18, MUTED, Typeface.BOLD);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(18), dp(18), dp(18), dp(18));
+            applyCardStyle(empty);
+            content.addView(empty, cardParams());
+            return;
+        }
+
+        for (int index = applications.length() - 1; index >= 0; index--) {
+            JSONObject item = applications.optJSONObject(index);
+            if (item != null) {
+                addApplicationCard(item, index);
+            }
+        }
+    }
+
+    private void addApplicationCard(JSONObject item, int index) {
+        LinearLayout card = vertical();
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(card);
+
+        TextView heading = label(
+                item.optString("title", "Application") + "\n"
+                        + item.optString("company", "Company") + "\n"
+                        + item.optString("status", "Prepared") + " • " + item.optString("date", ""),
+                19,
+                INK,
+                Typeface.BOLD
+        );
+        card.addView(heading, matchWrap());
+
+        LinearLayout actions = horizontal();
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams actionParams = matchWrap();
+        actionParams.setMargins(0, dp(14), 0, 0);
+        card.addView(actions, actionParams);
+
+        TextView copy = label("Copy details", 15, GREEN, Typeface.BOLD);
+        copy.setGravity(Gravity.CENTER);
+        copy.setPadding(dp(14), dp(10), dp(14), dp(10));
+        copy.setBackground(rounded(MINT, 20));
+        copy.setOnClickListener(view -> copyToClipboard("Application", applicationSummary(item)));
+        actions.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView delete = label("Delete", 15, Color.rgb(210, 54, 54), Typeface.BOLD);
+        delete.setGravity(Gravity.CENTER);
+        delete.setPadding(dp(14), dp(10), dp(14), dp(10));
+        delete.setOnClickListener(view -> confirmDeleteApplication(index));
+        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        deleteParams.setMargins(dp(10), 0, 0, 0);
+        actions.addView(delete, deleteParams);
+
+        content.addView(card, cardParams());
+    }
+
+    private void renderSavedJobs() {
+        setScrollableContent(20, 30, 34);
+
+        TextView back = label("< Profile", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showMain("Profile"));
+        content.addView(back, matchWrap());
+
+        TextView title = label("Saved Jobs", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        List<String> savedKeys = loadStringList("savedJobs");
+        List<Job> savedJobs = new ArrayList<>();
+        for (Job job : repository.allJobs()) {
+            if (savedKeys.contains(jobKey(job))) {
+                savedJobs.add(job);
+            }
+        }
+
+        if (savedJobs.isEmpty()) {
+            TextView empty = label("No saved jobs yet.\n\nOpen a vacancy and tap Save Job to keep it here.", 18, MUTED, Typeface.BOLD);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(18), dp(18), dp(18), dp(18));
+            applyCardStyle(empty);
+            content.addView(empty, cardParams());
+            return;
+        }
+
+        for (Job job : savedJobs) {
+            LinearLayout card = vertical();
+            card.setPadding(dp(16), dp(16), dp(16), dp(16));
+            applyCardStyle(card);
+            card.setOnClickListener(view -> showJobDetails(job));
+            card.addView(label(job.title + "\n" + job.company + "\n" + SalaryFormatter.format(job.currency, job.salaryMin, job.salaryMax, job.salaryPeriod), 18, INK, Typeface.BOLD), matchWrap());
+
+            TextView remove = label("Remove saved job", 15, Color.rgb(210, 54, 54), Typeface.BOLD);
+            remove.setPadding(0, dp(14), 0, 0);
+            remove.setOnClickListener(view -> {
+                setJobSaved(job, false);
+                renderSavedJobs();
+            });
+            card.addView(remove, matchWrap());
+            content.addView(card, cardParams());
+        }
+    }
+
+    private void showFeatureComingSoon(String title) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage("This Android screen is being brought up to iOS parity. The profile, saved jobs, and application tracker are active first.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private View jobCard(Job job, boolean compact) {
@@ -533,6 +744,19 @@ public final class MainActivity extends Activity {
         );
         hero.addView(meta, matchWrap());
 
+        TextView saveJob = button(isJobSaved(job) ? "Saved Job" : "Save Job", isJobSaved(job) ? MINT : GREEN, isJobSaved(job) ? GREEN : Color.WHITE);
+        saveJob.setOnClickListener(view -> {
+            if (guestMode || !profileExists()) {
+                showCreateProfilePrompt();
+                return;
+            }
+            setJobSaved(job, !isJobSaved(job));
+            showJobDetails(job);
+        });
+        LinearLayout.LayoutParams saveParams = matchHeight(dp(54));
+        saveParams.setMargins(0, dp(18), 0, 0);
+        hero.addView(saveJob, saveParams);
+
         addDetailsSection("Application Route", applicationCopy(job));
         addDetailsSection("Description", job.description);
         addDetailsSection("Requirements", job.requirements);
@@ -546,14 +770,16 @@ public final class MainActivity extends Activity {
     }
 
     private void handleApply(Job job) {
-        if (guestMode) {
+        if (guestMode || !profileExists()) {
+            showCreateProfilePrompt();
+            return;
+        }
+
+        if (!isProfileComplete()) {
             new AlertDialog.Builder(this)
-                    .setTitle("Create your profile")
-                    .setMessage("Create your profile to submit applications. Guests can browse, but applications need a profile.")
-                    .setPositiveButton("Create Profile", (dialog, which) -> {
-                        guestMode = false;
-                        showMain("Profile");
-                    })
+                    .setTitle("Complete your profile")
+                    .setMessage("Please complete your name, email, location, desired job title, professional summary, and skills before submitting applications.")
+                    .setPositiveButton("Complete Profile", (dialog, which) -> showProfileEditor())
                     .setNegativeButton("Cancel", null)
                     .show();
             return;
@@ -658,33 +884,245 @@ public final class MainActivity extends Activity {
 
     private String coverLetterDraft(Job job) {
         String greeting = isGovernmentMethod(job) ? "Dear Selection Committee," : "Dear Hiring Manager,";
-        return greeting + "\n\n"
-                + "APPLICATION FOR THE POSITION OF " + job.title.toUpperCase(Locale.ROOT) + "\n\n"
-                + "I am applying for the " + job.title + " position at " + job.company + ". My profile brings together public-sector awareness, structured analysis, stakeholder communication, and digital systems experience, which I would apply carefully to the responsibilities of this role.\n\n"
-                + "The vacancy calls for someone who can understand requirements, work with accuracy, communicate clearly, and deliver dependable results. My background in research, monitoring and evaluation, academic administration, and technology-supported process improvement has prepared me to approach that work with evidence, discipline, and practical judgement.\n\n"
-                + "I would welcome the opportunity to contribute to " + job.company + " by bringing a professional standard of preparation, clear written communication, and a service-minded approach to the post. Thank you for considering my application.\n\n"
-                + "Kind regards";
+        String profileSummary = cleanSentence(getProfile("summary", ""));
+        String skills = skillSummary(getProfile("skills", ""));
+        String roleFocus = roleFocus(job);
+        String applicantName = getProfile("name", "");
+        String employer = employerPhrase(job.company);
+        String profileIdentity = professionalIdentitySentence(profileSummary);
+
+        StringBuilder letter = new StringBuilder();
+        letter.append(greeting).append("\n\n");
+        if (isGovernmentMethod(job)) {
+            letter.append("APPLICATION FOR THE POSITION OF ")
+                    .append(job.title.toUpperCase(Locale.ROOT))
+                    .append(referenceSuffix(job).toUpperCase(Locale.ROOT))
+                    .append("\n\n");
+        }
+
+        letter.append("I am writing to apply for the ")
+                .append(job.title)
+                .append(" position at ")
+                .append(employer)
+                .append(". ")
+                .append(profileIdentity)
+                .append(" ");
+
+        letter.append("This opportunity interests me because the role calls for ")
+                .append(roleFocus)
+                .append(", and those are areas where I can contribute with preparation, accuracy, and professional judgement.")
+                .append("\n\n");
+
+        letter.append("In my work, I have learned to read requirements closely, organise information into usable outputs, communicate clearly with different stakeholders, and complete tasks with accountability. ");
+        if (!skills.isEmpty()) {
+            letter.append("My profile also reflects strengths in ")
+                    .append(skills)
+                    .append(", which I would apply to the duties described in the advertisement. ");
+        }
+        letter.append("I have considered the vacancy requirements carefully and would approach the post with the seriousness expected by ")
+                .append(employer)
+                .append(".")
+                .append("\n\n");
+
+        letter.append("I would welcome the opportunity to be considered for this role and to discuss how my experience can support the priorities of the post. Thank you for your time and consideration.")
+                .append("\n\n")
+                .append("Kind regards");
+
+        if (!applicantName.isEmpty()) {
+            letter.append("\n").append(applicantName);
+        }
+
+        return letter.toString();
+    }
+
+    private String professionalIdentitySentence(String summary) {
+        if (summary == null || summary.trim().isEmpty()) {
+            return "My background combines structured analysis, careful administration, stakeholder communication, and digital problem solving.";
+        }
+
+        String cleaned = summary.trim();
+        String lower = cleaned.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("i ") || lower.startsWith("my ")) {
+            return cleanSentence(cleaned);
+        }
+
+        String identity = lowerFirst(cleaned);
+        String identityLower = identity.toLowerCase(Locale.ROOT);
+        if (identityLower.startsWith("experienced in ")) {
+            return cleanSentence("I have experience in " + identity.substring("experienced in ".length()));
+        }
+        if (identityLower.startsWith("skilled in ")
+                || identityLower.startsWith("proficient in ")
+                || identityLower.startsWith("qualified in ")) {
+            return cleanSentence("I am " + identity);
+        }
+        if (identityLower.startsWith("specialising in ") || identityLower.startsWith("specializing in ")) {
+            int prefixLength = identityLower.startsWith("specialising in ")
+                    ? "specialising in ".length()
+                    : "specializing in ".length();
+            return cleanSentence("I specialise in " + identity.substring(prefixLength));
+        }
+        if (identityLower.startsWith("a ") || identityLower.startsWith("an ")) {
+            return cleanSentence("I am " + identity);
+        }
+
+        return cleanSentence("I am " + articleFor(identity) + " " + identity);
+    }
+
+    private String employerPhrase(String company) {
+        if (company == null || company.trim().isEmpty()) {
+            return "the employer";
+        }
+
+        String cleaned = company.trim();
+        String lower = cleaned.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("the ")) {
+            return cleaned;
+        }
+
+        if (lower.startsWith("department ")
+                || lower.startsWith("office ")
+                || lower.startsWith("ministry ")
+                || lower.startsWith("presidency")) {
+            return "the " + cleaned;
+        }
+
+        return cleaned;
+    }
+
+    private String lowerFirst(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value.substring(0, 1).toLowerCase(Locale.ROOT) + value.substring(1);
+    }
+
+    private String articleFor(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "a";
+        }
+
+        String word = value.trim().split("\\s+")[0].toLowerCase(Locale.ROOT);
+        if (word.startsWith("uni") || word.startsWith("use") || word.startsWith("one")) {
+            return "a";
+        }
+
+        char first = word.charAt(0);
+        return "aeiou".indexOf(first) >= 0 ? "an" : "a";
+    }
+
+    private String cleanSentence(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String cleaned = value
+                .replace("•", " ")
+                .replace("❖", " ")
+                .replace("*", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        if (cleaned.length() > 240) {
+            int sentenceEnd = cleaned.indexOf(". ");
+            if (sentenceEnd > 80 && sentenceEnd < 240) {
+                cleaned = cleaned.substring(0, sentenceEnd + 1);
+            } else {
+                cleaned = cleaned.substring(0, 240).trim();
+                int lastSpace = cleaned.lastIndexOf(" ");
+                if (lastSpace > 120) {
+                    cleaned = cleaned.substring(0, lastSpace).trim();
+                }
+                cleaned = cleaned + ".";
+            }
+        }
+
+        if (!cleaned.endsWith(".") && !cleaned.endsWith("!") && !cleaned.endsWith("?")) {
+            cleaned = cleaned + ".";
+        }
+
+        return cleaned;
+    }
+
+    private String skillSummary(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "";
+        }
+
+        String[] parts = value
+                .replace("•", ",")
+                .replace("❖", ",")
+                .replace("\n", ",")
+                .split(",");
+        List<String> clean = new ArrayList<>();
+        for (String part : parts) {
+            String item = part.replaceAll("\\s+", " ").trim();
+            if (!item.isEmpty() && item.length() > 2 && clean.size() < 5) {
+                clean.add(item);
+            }
+        }
+
+        if (clean.isEmpty()) {
+            return "";
+        }
+
+        if (clean.size() == 1) {
+            return clean.get(0);
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < clean.size(); index++) {
+            if (index > 0 && index == clean.size() - 1) {
+                builder.append(" and ");
+            } else if (index > 0) {
+                builder.append(", ");
+            }
+            builder.append(clean.get(index));
+        }
+        return builder.toString();
+    }
+
+    private String roleFocus(Job job) {
+        String text = (job.title + " " + job.description + " " + job.requirements).toLowerCase(Locale.ROOT);
+        if (text.contains("monitoring") || text.contains("evaluation") || text.contains("research")) {
+            return "evidence-led analysis, careful reporting, and the ability to turn complex information into sound decisions";
+        }
+        if (text.contains("customer") || text.contains("service") || text.contains("client")) {
+            return "reliable client service, accuracy under pressure, and clear communication";
+        }
+        if (text.contains("finance") || text.contains("risk") || text.contains("audit")) {
+            return "risk awareness, disciplined analysis, and responsible handling of information";
+        }
+        if (isGovernmentMethod(job)) {
+            return "public-service accountability, policy awareness, accurate documentation, and respectful stakeholder engagement";
+        }
+        return "clear communication, organised execution, and the ability to deliver work to a dependable professional standard";
     }
 
     private void routeApplication(Job job) {
         if (isEmailMethod(job)) {
+            trackApplication(job, "Email draft prepared");
             openEmailApplication(job);
             return;
         }
 
         if (isWebsiteMethod(job)) {
+            trackApplication(job, "Website application prepared");
             openApplicationWebsite(job);
             return;
         }
 
         if ("manualInstruction".equals(job.method) || "governmentManual".equals(job.method)) {
+            trackApplication(job, "Manual action required");
             showManualInstructions(job);
             return;
         }
 
+        trackApplication(job, "Submitted inside Let’s Apply");
         new AlertDialog.Builder(this)
                 .setTitle("Application submitted")
-                .setMessage("This vacancy has been prepared for in-app submission. Application tracking will sync to Firebase in the next Android phase.")
+                .setMessage("This vacancy has been recorded in My Applications. Firebase application sync will come in the next Android phase.")
                 .setPositiveButton("OK", null)
                 .show();
     }
@@ -712,10 +1150,24 @@ public final class MainActivity extends Activity {
     }
 
     private String emailDraft(Job job) {
-        return "Dear Hiring Manager,\n\n"
-                + "Please receive my application for the " + job.title + " position" + referenceSuffix(job) + ".\n\n"
-                + "I have prepared my CV, cover letter, and any required supporting documents for your consideration.\n\n"
-                + "Kind regards";
+        String greeting = isGovernmentMethod(job) ? "Dear Selection Committee," : "Dear Hiring Manager,";
+        String applicantName = getProfile("name", "");
+        StringBuilder draft = new StringBuilder();
+        draft.append(greeting)
+                .append("\n\n")
+                .append("Please receive my application for the ")
+                .append(job.title)
+                .append(" position")
+                .append(referenceSuffix(job))
+                .append(". I have prepared my CV, cover letter, and the required supporting documents for your consideration.")
+                .append("\n\n")
+                .append("Kind regards");
+
+        if (!applicantName.isEmpty()) {
+            draft.append("\n").append(applicantName);
+        }
+
+        return draft.toString();
     }
 
     private void openApplicationWebsite(Job job) {
@@ -915,6 +1367,200 @@ public final class MainActivity extends Activity {
                 .setTitle("Copied")
                 .setMessage(label + " copied.")
                 .setPositiveButton("OK", null)
+                .show();
+    }
+
+    private void showCreateProfilePrompt() {
+        new AlertDialog.Builder(this)
+                .setTitle("Create your profile")
+                .setMessage("Create your profile to save jobs, prepare documents, and submit applications.")
+                .setPositiveButton("Create Profile", (dialog, which) -> {
+                    guestMode = false;
+                    showMain("Profile");
+                    showProfileEditor();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private boolean profileExists() {
+        return preferences != null && preferences.getBoolean("profile.exists", false);
+    }
+
+    private boolean isProfileComplete() {
+        return profileExists()
+                && !getProfile("name", "").isEmpty()
+                && !getProfile("email", "").isEmpty()
+                && !getProfile("location", "").isEmpty()
+                && !getProfile("jobTitle", "").isEmpty()
+                && !getProfile("summary", "").isEmpty()
+                && !getProfile("skills", "").isEmpty();
+    }
+
+    private String profileCompletionText() {
+        return isProfileComplete() ? "Profile 100% complete" : "Profile needs a few details";
+    }
+
+    private String getProfile(String key, String fallback) {
+        if (preferences == null) {
+            return fallback;
+        }
+        String value = preferences.getString("profile." + key, fallback);
+        return value == null ? fallback : value.trim();
+    }
+
+    private EditText input(String hint, String text, int minLines) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setText(text);
+        field.setTextSize(18);
+        field.setTextColor(INK);
+        field.setHintTextColor(Color.rgb(150, 156, 162));
+        field.setPadding(dp(16), dp(10), dp(16), dp(10));
+        field.setMinLines(minLines);
+        field.setGravity(minLines > 1 ? Gravity.TOP : Gravity.CENTER_VERTICAL);
+        field.setBackground(rounded(Color.WHITE, 14));
+        return field;
+    }
+
+    private LinearLayout.LayoutParams inputParams(int minLines) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                minLines > 1 ? dp(70 + (minLines * 26)) : dp(58)
+        );
+        params.setMargins(0, 0, 0, dp(12));
+        return params;
+    }
+
+    private String value(EditText field) {
+        return field.getText() == null ? "" : field.getText().toString().trim();
+    }
+
+    private boolean isJobSaved(Job job) {
+        return loadStringList("savedJobs").contains(jobKey(job));
+    }
+
+    private void setJobSaved(Job job, boolean saved) {
+        List<String> keys = loadStringList("savedJobs");
+        String key = jobKey(job);
+        if (saved && !keys.contains(key)) {
+            keys.add(key);
+        }
+        if (!saved) {
+            keys.remove(key);
+        }
+        saveStringList("savedJobs", keys);
+    }
+
+    private String jobKey(Job job) {
+        return (job.title + "|" + job.company).toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> loadStringList(String key) {
+        List<String> values = new ArrayList<>();
+        JSONArray array = loadArray(key);
+        for (int index = 0; index < array.length(); index++) {
+            String value = array.optString(index, "");
+            if (!value.isEmpty()) {
+                values.add(value);
+            }
+        }
+        return values;
+    }
+
+    private void saveStringList(String key, List<String> values) {
+        JSONArray array = new JSONArray();
+        for (String value : values) {
+            array.put(value);
+        }
+        preferences.edit().putString(key, array.toString()).apply();
+    }
+
+    private JSONArray loadArray(String key) {
+        if (preferences == null) {
+            return new JSONArray();
+        }
+        String raw = preferences.getString(key, "[]");
+        try {
+            return new JSONArray(raw == null ? "[]" : raw);
+        } catch (JSONException error) {
+            return new JSONArray();
+        }
+    }
+
+    private void saveArray(String key, JSONArray array) {
+        preferences.edit().putString(key, array.toString()).apply();
+    }
+
+    private void trackApplication(Job job, String status) {
+        JSONArray applications = loadArray("applications");
+        String key = jobKey(job);
+
+        for (int index = 0; index < applications.length(); index++) {
+            JSONObject existing = applications.optJSONObject(index);
+            if (existing != null && key.equals(existing.optString("jobKey"))) {
+                existing.remove("status");
+                existing.remove("date");
+                try {
+                    existing.put("status", status);
+                    existing.put("date", today());
+                } catch (JSONException ignored) {
+                }
+                saveArray("applications", applications);
+                return;
+            }
+        }
+
+        JSONObject item = new JSONObject();
+        try {
+            item.put("jobKey", key);
+            item.put("title", job.title);
+            item.put("company", job.company);
+            item.put("method", job.method);
+            item.put("status", status);
+            item.put("date", today());
+            item.put("reference", referenceValue(job));
+            item.put("email", job.applicationEmail == null ? "" : job.applicationEmail);
+            item.put("url", job.applicationUrl == null ? "" : job.applicationUrl);
+        } catch (JSONException ignored) {
+        }
+        applications.put(item);
+        saveArray("applications", applications);
+    }
+
+    private String today() {
+        return new SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(new Date());
+    }
+
+    private String applicationSummary(JSONObject item) {
+        return item.optString("title", "Application") + "\n"
+                + item.optString("company", "") + "\n"
+                + "Status: " + item.optString("status", "") + "\n"
+                + "Date: " + item.optString("date", "") + "\n"
+                + "Reference: " + item.optString("reference", "") + "\n"
+                + "Email: " + item.optString("email", "") + "\n"
+                + "Link: " + item.optString("url", "");
+    }
+
+    private void confirmDeleteApplication(int index) {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete application?")
+                .setMessage("This removes the application from this Android device.")
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    JSONArray oldItems = loadArray("applications");
+                    JSONArray newItems = new JSONArray();
+                    for (int i = 0; i < oldItems.length(); i++) {
+                        if (i != index) {
+                            Object item = oldItems.opt(i);
+                            if (item != null) {
+                                newItems.put(item);
+                            }
+                        }
+                    }
+                    saveArray("applications", newItems);
+                    renderApplications();
+                })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 

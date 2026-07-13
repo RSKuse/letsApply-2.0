@@ -243,6 +243,10 @@ class AICareerService {
         let strengths = relevantStrengths(for: userProfile, job: job)
         let priorityText = naturalList(Array(priorities.prefix(2)))
         let strengthText = naturalList(strengths)
+        let profileIdentity = professionalIdentitySentence(
+            from: userProfile.professionalSummary
+        )
+        let employer = employerNamePhrase(job.companyName)
         let reference = cleanInline(job.application.referenceNumber)
         let subjectReference = reference.isEmpty ? "" : " (REFERENCE: \(reference))"
         let salutation = job.requiresGovernmentFlow
@@ -250,16 +254,19 @@ class AICareerService {
             : "Dear Hiring Manager,"
         let subject = "APPLICATION FOR THE POSITION OF \(job.title.uppercased())\(subjectReference)"
 
-        var opening = "I wish to apply for the \(job.title) position at \(job.companyName)."
+        var opening = "I am writing to apply for the \(job.title) position at \(employer)."
+        if !profileIdentity.isEmpty {
+            opening += " \(profileIdentity)"
+        }
         if !strengthText.isEmpty {
-            opening += " Across my professional experience, I have developed \(strengthText), which align closely with the capabilities this appointment requires."
+            opening += " This background has developed strengths in \(strengthText), which align closely with the capabilities this appointment requires."
         } else {
             opening += " My professional experience has prepared me to approach this opportunity with sound judgement, accountability, and careful attention to the quality of my work."
         }
 
         var motivation = ""
         if !priorityText.isEmpty {
-            motivation = "What interests me most about this opportunity is its focus on \(priorityText). These responsibilities call for someone who can connect analysis with practical delivery, work constructively with stakeholders, and maintain a clear line of accountability from planning through to reporting."
+            motivation = "This opportunity interests me because the role calls for \(priorityText). These responsibilities require someone who can connect analysis with practical delivery, work constructively with stakeholders, and maintain a clear line of accountability from planning through to reporting."
         }
 
         let experienceParagraphs = relevantExperienceParagraphs(
@@ -271,9 +278,9 @@ class AICareerService {
 
         let closing: String
         if let priority = priorities.first, !priority.isEmpty {
-            closing = "I would value the opportunity to contribute to \(job.companyName) and support its work in \(embeddedPhrase(priority)). I am confident that my experience, considered approach, and commitment to high professional standards would enable me to make a meaningful contribution in the \(job.title) role. Thank you for considering my application. I would welcome the opportunity to discuss my suitability with the selection panel."
+            closing = "I would value the opportunity to contribute to \(employer) and support its work in \(embeddedPhrase(priority)). I am confident that my experience, considered approach, and commitment to high professional standards would enable me to make a meaningful contribution in the \(job.title) role. Thank you for considering my application. I would welcome the opportunity to discuss my suitability with the selection panel."
         } else {
-            closing = "I would value the opportunity to contribute to \(job.companyName) as \(job.title). Thank you for considering my application. I would welcome the opportunity to discuss how my experience and approach could support the organisation’s priorities."
+            closing = "I would value the opportunity to contribute to \(employer) as \(job.title). Thank you for considering my application. I would welcome the opportunity to discuss how my experience and approach could support the organisation’s priorities."
         }
 
         return (
@@ -825,6 +832,89 @@ class AICareerService {
         \(userProfile.email)
         """
         .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func professionalIdentitySentence(from value: String) -> String {
+        let summary = firstSentence(from: value, fallback: "")
+        guard !summary.isEmpty else { return "" }
+
+        let lowerSummary = summary.lowercased()
+        if lowerSummary.hasPrefix("i ") || lowerSummary.hasPrefix("my ") {
+            return sentenceWithPunctuation(summary)
+        }
+
+        let identity = lowercased(summary)
+        let lowerIdentity = identity.lowercased()
+        if lowerIdentity.hasPrefix("experienced in ") {
+            let remainder = identity.dropFirst("experienced in ".count)
+            return sentenceWithPunctuation("I have experience in \(remainder)")
+        }
+
+        if lowerIdentity.hasPrefix("skilled in ")
+            || lowerIdentity.hasPrefix("proficient in ")
+            || lowerIdentity.hasPrefix("qualified in ") {
+            return sentenceWithPunctuation("I am \(identity)")
+        }
+
+        if lowerIdentity.hasPrefix("specialising in ")
+            || lowerIdentity.hasPrefix("specializing in ") {
+            let prefix = lowerIdentity.hasPrefix("specialising in ")
+                ? "specialising in "
+                : "specializing in "
+            let remainder = identity.dropFirst(prefix.count)
+            return sentenceWithPunctuation("I specialise in \(remainder)")
+        }
+
+        if lowerIdentity.hasPrefix("a ") || lowerIdentity.hasPrefix("an ") {
+            return sentenceWithPunctuation("I am \(identity)")
+        }
+
+        return sentenceWithPunctuation(
+            "I am \(indefiniteArticle(for: identity)) \(identity)"
+        )
+    }
+
+    private func employerNamePhrase(_ value: String) -> String {
+        let cleaned = cleanInline(value)
+        guard !cleaned.isEmpty else { return "the employer" }
+
+        let lowercasedValue = cleaned.lowercased()
+        if lowercasedValue.hasPrefix("the ") {
+            return cleaned
+        }
+
+        let articlePrefixes = [
+            "department ",
+            "office ",
+            "ministry ",
+            "presidency"
+        ]
+
+        if articlePrefixes.contains(where: { lowercasedValue.hasPrefix($0) }) {
+            return "the \(cleaned)"
+        }
+
+        return cleaned
+    }
+
+    private func indefiniteArticle(for value: String) -> String {
+        let firstWord = value
+            .components(separatedBy: .whitespacesAndNewlines)
+            .first?
+            .trimmingCharacters(in: .punctuationCharacters)
+            .lowercased() ?? ""
+
+        guard let firstCharacter = firstWord.first else {
+            return "a"
+        }
+
+        if firstWord.hasPrefix("uni")
+            || firstWord.hasPrefix("use")
+            || firstWord.hasPrefix("one") {
+            return "a"
+        }
+
+        return "aeiou".contains(firstCharacter) ? "an" : "a"
     }
 
     private func profileEvidenceText(for profile: UserProfile) -> String {
