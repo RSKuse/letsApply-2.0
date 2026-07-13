@@ -34,9 +34,9 @@ final class SalaryFormatter {
             case "USD":
                 return "$";
             case "GBP":
-                return "GBP ";
+                return "£";
             case "EUR":
-                return "EUR ";
+                return "€";
             default:
                 return currency.toUpperCase(Locale.ROOT) + " ";
         }
