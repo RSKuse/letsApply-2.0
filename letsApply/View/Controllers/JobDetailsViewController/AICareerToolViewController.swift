@@ -14,7 +14,9 @@ class AICareerToolViewController: UIViewController {
 
     private lazy var instructionLabel: UILabel = {
         let label = UILabel()
-        label.text = "Premium tool for \(job.title) at \(job.companyName). The UI is ready for API integration."
+        label.text = aiCareerService.isRemoteAIEnabled
+            ? "Secure AI generation for \(job.title) at \(job.companyName). Review every sentence before using it."
+            : "An assisted local draft will be created. Secure AI generation is not connected yet."
         label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -108,7 +110,11 @@ class AICareerToolViewController: UIViewController {
         case .tailorCV:
             aiCareerService.tailorCV(userProfile: userProfile, job: job, completion: completion)
         case .improveCV:
-            aiCareerService.improveCV(userProfile: userProfile, completion: completion)
+            aiCareerService.improveCV(
+                userProfile: userProfile,
+                job: job,
+                completion: completion
+            )
         }
     }
 }

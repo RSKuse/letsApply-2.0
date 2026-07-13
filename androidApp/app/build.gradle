@@ -1,0 +1,26 @@
+plugins {
+    id "com.android.application"
+}
+
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
+android {
+    namespace "com.simphiwe.letsapply"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.simphiwe.letsapply"
+        minSdk 23
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+dependencies {
+    implementation platform("com.google.firebase:firebase-bom:33.1.2")
+    implementation "com.google.firebase:firebase-auth"
+    implementation "com.google.firebase:firebase-firestore"
+}

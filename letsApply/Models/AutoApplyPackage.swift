@@ -14,4 +14,5 @@ struct AutoApplyPackage {
     let coverLetterText: String
     let emailSubject: String
     let emailBody: String
+    let isAIGenerated: Bool
 }

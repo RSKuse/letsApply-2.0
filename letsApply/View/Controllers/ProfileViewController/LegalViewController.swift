@@ -47,6 +47,10 @@ final class LegalViewController: UIViewController {
             body: "CV and cover-letter PDFs are generated locally on your device. When you share a document or continue to an employer website, the receiving app or employer applies its own privacy practices."
         ))
         stackView.addArrangedSubview(makeSection(
+            title: "Secure AI Career Tools",
+            body: "When you choose an AI tool, Let’s Apply sends only relevant career profile and vacancy evidence to its protected server and OpenAI. Passwords, ID numbers, Z83 declarations, signatures, photographs, and private references are excluded. You must review all generated content."
+        ))
+        stackView.addArrangedSubview(makeSection(
             title: "Your Control",
             body: "You can edit your profile, sign out, or permanently delete your account from the Profile screen. Account deletion removes your profile, saved jobs, applications, and Firebase sign-in account."
         ))
