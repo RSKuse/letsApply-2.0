@@ -1,0 +1,8 @@
+name = "lets-apply-ai"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "letsapply-f5aff"
+OPENAI_MODEL = "gpt-5.4-mini"
+REQUIRE_PREMIUM = "false"

@@ -827,7 +827,7 @@ class AutoApplyAssistantViewController: UIViewController {
             userProfile: userProfile,
             job: job,
             coverLetterText: coverLetterTextView.text,
-            isAIGenerated: true,
+            isAIGenerated: autoApplyPackage?.isAIGenerated ?? false,
             tailoredCVText: cvTextView.text,
             recruiterEmailSubject: emailDraft.subject,
             recruiterEmailBody: emailDraft.body,

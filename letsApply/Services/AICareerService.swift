@@ -7,6 +7,12 @@ import Foundation
 
 class AICareerService {
 
+    private let remoteService = RemoteAICareerService()
+
+    var isRemoteAIEnabled: Bool {
+        remoteService.isConfigured
+    }
+
     enum CareerTool {
         case coverLetter
         case tailorCV
@@ -30,6 +36,17 @@ class AICareerService {
         cvText: String? = nil,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
+        if remoteService.isConfigured {
+            remoteService.generateText(
+                task: .coverLetter,
+                userProfile: userProfile,
+                job: job,
+                currentDraft: cvText,
+                completion: completion
+            )
+            return
+        }
+
         completion(.success(makeCoverLetter(
             userProfile: userProfile,
             job: job,
@@ -43,16 +60,21 @@ class AICareerService {
         cvText: String? = nil,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
-        let response = """
-        CV tailoring integration is ready for \(job.title).
+        if remoteService.isConfigured {
+            remoteService.generateText(
+                task: .tailorCV,
+                userProfile: userProfile,
+                job: job,
+                currentDraft: cvText,
+                completion: completion
+            )
+            return
+        }
 
-        Suggested AI output:
-        - Missing skills from this job
-        - Stronger professional summary
-        - Job-specific experience wording
-        - Recommended CV sections to move higher
-        """
-        completion(.success(response))
+        completion(.success(makeCVPreview(
+            userProfile: userProfile,
+            job: job
+        )))
     }
 
     func generateApplicationEmail(
@@ -61,6 +83,17 @@ class AICareerService {
         coverLetter: String,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
+        if remoteService.isConfigured {
+            remoteService.generateText(
+                task: .applicationEmail,
+                userProfile: userProfile,
+                job: job,
+                currentDraft: coverLetter,
+                completion: completion
+            )
+            return
+        }
+
         completion(.success(makeApplicationEmail(
             userProfile: userProfile,
             job: job,
@@ -70,18 +103,24 @@ class AICareerService {
 
     func improveCV(
         userProfile: UserProfile,
+        job: Job,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
-        let response = """
-        CV improvement integration is ready.
+        if remoteService.isConfigured {
+            remoteService.generateText(
+                task: .improveCV,
+                userProfile: userProfile,
+                job: job,
+                currentDraft: nil,
+                completion: completion
+            )
+            return
+        }
 
-        Suggested AI output:
-        - Clearer achievements
-        - Stronger skills grouping
-        - Education and experience cleanup
-        - Recruiter-friendly wording
-        """
-        completion(.success(response))
+        completion(.success(makeCVPreview(
+            userProfile: userProfile,
+            job: job
+        )))
     }
 
     func prepareAutoApplyPackage(
@@ -89,6 +128,15 @@ class AICareerService {
         job: Job,
         completion: @escaping (Result<AutoApplyPackage, Error>) -> Void
     ) {
+        if remoteService.isConfigured {
+            remoteService.generatePackage(
+                userProfile: userProfile,
+                job: job,
+                completion: completion
+            )
+            return
+        }
+
         let requiredKeywords = uniqueValues(
             job.requirements + job.qualifications + job.responsibilities
         )
@@ -138,7 +186,8 @@ class AICareerService {
             tailoredCVText: tailoredCVText,
             coverLetterText: coverLetterText,
             emailSubject: emailSubject,
-            emailBody: emailBody
+            emailBody: emailBody,
+            isAIGenerated: false
         )
 
         completion(.success(package))

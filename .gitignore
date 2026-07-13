@@ -11,6 +11,8 @@ xcuserdata/
 # Build output
 DerivedData/
 build/
+node_modules/
+.wrangler/
 
 # Generated vacancy review files
 imports/
@@ -22,3 +24,7 @@ __pycache__/
 # Local credentials
 *.p8
 firebase-service-account*.json
+.env
+.env.local
+.env.production
+server/.dev.vars

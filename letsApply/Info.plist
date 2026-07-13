@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Let's Apply</string>
+	<key>AIServiceBaseURL</key>
+	<string>$(AI_SERVICE_BASE_URL)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Let&apos;s Apply uses your photo library so you can choose a profile picture.</string>
 	<key>UIApplicationSceneManifest</key>

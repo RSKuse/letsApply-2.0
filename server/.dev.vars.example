@@ -1,0 +1,4 @@
+OPENAI_API_KEY=replace_with_a_local_development_key
+FIREBASE_PROJECT_ID=letsapply-f5aff
+OPENAI_MODEL=gpt-5.4-mini
+REQUIRE_PREMIUM=false

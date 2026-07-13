@@ -49,8 +49,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F3C0B7152CFCE61F007F1573 /* letsApplyTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = letsApplyTests;
 			sourceTree = "<group>";
 		};
@@ -195,9 +193,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-letsApply/Pods-letsApply-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-letsApply/Pods-letsApply-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -243,6 +245,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 0DAF6EBDB588EAB74BE173E1 /* Pods-letsApply.debug.xcconfig */;
 			buildSettings = {
+				AI_SERVICE_BASE_URL = "";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = letsApply/letsApply.entitlements;
@@ -273,6 +276,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA2CFD037A5CEA1C765C19BC /* Pods-letsApply.release.xcconfig */;
 			buildSettings = {
+				AI_SERVICE_BASE_URL = "";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = letsApply/letsApply.entitlements;
