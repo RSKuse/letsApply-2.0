@@ -7,11 +7,14 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,22 +25,31 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.text.Editable;
 import android.text.TextWatcher;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public final class MainActivity extends Activity {
     private static final int GREEN = Color.rgb(11, 127, 80);
@@ -1066,9 +1078,12 @@ public final class MainActivity extends Activity {
 
         addDetailsSection("Application Details", job.title + "\n" + job.company + "\n" + job.location + "\n" + SalaryFormatter.format(job.currency, job.salaryMin, job.salaryMax, job.salaryPeriod));
         addDetailsSection("How You'll Apply", applicationCopy(job));
+        if (isGovernmentMethod(job)) {
+            addZ83PreparationCard(job);
+        }
         addDetailsSection("Required Checklist", checklistFor(job));
 
-        TextView score = label("Job Fit\n\n" + matchScore(job) + "%\n\nReview your CV, cover letter, and route before submitting.", 22, GREEN, Typeface.BOLD);
+        TextView score = label(jobFitCopy(job), 20, GREEN, Typeface.BOLD);
         score.setGravity(Gravity.CENTER);
         score.setPadding(dp(18), dp(18), dp(18), dp(18));
         applyCardStyle(score);
@@ -1135,7 +1150,7 @@ public final class MainActivity extends Activity {
         builder.append("Detailed CV\n");
         builder.append("Tailored cover letter\n");
         if (isGovernmentMethod(job)) {
-            builder.append("Completed and signed Z83 form\n");
+            builder.append(isZ83Ready(job) ? "Completed and signed Z83 form\n" : "Z83 form still needs review and signature\n");
             builder.append("Reference ").append(referenceValue(job)).append(" confirmed\n");
             builder.append("Certified ID and qualifications if required\n");
         }
@@ -1148,17 +1163,145 @@ public final class MainActivity extends Activity {
         return builder.toString().trim();
     }
 
+    private void addZ83PreparationCard(Job job) {
+        LinearLayout card = vertical();
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        card.setBackground(rounded(isZ83Ready(job) ? MINT : Color.WHITE, 16));
+        card.setElevation(dp(1));
+
+        String status = isZ83Ready(job)
+                ? "Your Z83 is prepared for this vacancy. You can still review or edit it before submitting."
+                : "Government vacancies require a completed Z83. Prepare it once, sign it, and Let’s Apply will reuse your saved details.";
+        TextView title = label((isZ83Ready(job) ? "Review or Edit Z83" : "Prepare Z83") + "\n" + status, 19, isZ83Ready(job) ? DARK_GREEN : INK, Typeface.BOLD);
+        card.addView(title, matchWrap());
+
+        TextView action = button(isZ83Ready(job) ? "Review Z83" : "Prepare Z83", isZ83Ready(job) ? GREEN : DARK_GREEN, Color.WHITE);
+        action.setOnClickListener(view -> showZ83Editor(job));
+        LinearLayout.LayoutParams actionParams = matchHeight(dp(54));
+        actionParams.setMargins(0, dp(14), 0, 0);
+        card.addView(action, actionParams);
+
+        content.addView(card, cardParams());
+    }
+
+    private String jobFitCopy(Job job) {
+        List<String> matched = matchedKeywords(job);
+        List<String> missing = missingKeywords(job);
+        String matchedText = matched.isEmpty() ? "Profile and vacancy share general professional fit." : joinHuman(matched, 4);
+        String missingText = missing.isEmpty() ? "No major keyword gaps detected from the current advert." : joinHuman(missing, 4);
+
+        return "Job Fit\n\n"
+                + matchScore(job)
+                + "%\n\nMatched strengths: "
+                + matchedText
+                + ".\n\nImprove before submitting: "
+                + missingText
+                + ".";
+    }
+
     private int matchScore(Job job) {
-        String text = (job.title + " " + job.requirements + " " + job.description).toLowerCase(Locale.ROOT);
-        int score = 52;
-        if (text.contains("research") || text.contains("analysis")) score += 12;
-        if (text.contains("report") || text.contains("writing")) score += 10;
-        if (text.contains("monitoring") || text.contains("evaluation")) score += 12;
-        if (text.contains("customer")) score -= 6;
-        if (isGovernmentMethod(job)) score += 7;
+        List<String> required = requiredKeywords(job);
+        List<String> matched = matchedKeywords(job);
+        int score = 45;
+        if (!required.isEmpty()) {
+            score += Math.round((matched.size() * 45f) / required.size());
+        }
+        if (isProfileComplete()) {
+            score += 6;
+        }
+        if (isGovernmentMethod(job) && profileCorpus().contains("public")) {
+            score += 5;
+        }
         if (score > 94) return 94;
         if (score < 38) return 38;
         return score;
+    }
+
+    private List<String> matchedKeywords(Job job) {
+        String profile = profileCorpus();
+        List<String> matched = new ArrayList<>();
+        for (String keyword : requiredKeywords(job)) {
+            if (profile.contains(keyword)) {
+                matched.add(keyword);
+            }
+        }
+        return matched;
+    }
+
+    private List<String> missingKeywords(Job job) {
+        String profile = profileCorpus();
+        List<String> missing = new ArrayList<>();
+        for (String keyword : requiredKeywords(job)) {
+            if (!profile.contains(keyword)) {
+                missing.add(keyword);
+            }
+        }
+        return missing;
+    }
+
+    private List<String> requiredKeywords(Job job) {
+        String text = normaliseSearchText(job.title + " " + job.description + " " + job.requirements);
+        String[] bank = {
+                "research", "analysis", "monitoring", "evaluation", "report", "policy",
+                "stakeholder", "communication", "administration", "planning", "finance",
+                "risk", "audit", "customer", "service", "agriculture", "driver",
+                "safety", "curriculum", "inspection", "digital", "data", "leadership",
+                "project", "public", "governance", "writing"
+        };
+        Set<String> keywords = new LinkedHashSet<>();
+        for (String keyword : bank) {
+            if (text.contains(keyword)) {
+                keywords.add(keyword);
+            }
+        }
+        if (keywords.isEmpty() && isGovernmentMethod(job)) {
+            keywords.add("public");
+            keywords.add("administration");
+            keywords.add("communication");
+        }
+        return new ArrayList<>(keywords);
+    }
+
+    private String profileCorpus() {
+        return normaliseSearchText(
+                getProfile("jobTitle", "") + " "
+                        + getProfile("summary", "") + " "
+                        + getProfile("skills", "") + " "
+                        + getProfile("experience", "") + " "
+                        + getProfile("education", "") + " "
+                        + getProfile("certificates", "")
+        );
+    }
+
+    private String normaliseSearchText(String value) {
+        return value == null
+                ? ""
+                : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9 ]", " ").replaceAll("\\s+", " ").trim();
+    }
+
+    private String joinHuman(List<String> values, int limit) {
+        List<String> clean = new ArrayList<>();
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty() && clean.size() < limit) {
+                clean.add(value.trim());
+            }
+        }
+        if (clean.isEmpty()) {
+            return "";
+        }
+        if (clean.size() == 1) {
+            return clean.get(0);
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < clean.size(); index++) {
+            if (index > 0 && index == clean.size() - 1) {
+                builder.append(" and ");
+            } else if (index > 0) {
+                builder.append(", ");
+            }
+            builder.append(clean.get(index));
+        }
+        return builder.toString();
     }
 
     private String coverLetterDraft(Job job) {
@@ -1169,6 +1312,7 @@ public final class MainActivity extends Activity {
         String applicantName = getProfile("name", "");
         String employer = employerPhrase(job.company);
         String profileIdentity = professionalIdentitySentence(profileSummary);
+        String evidence = evidenceSentence();
 
         StringBuilder letter = new StringBuilder();
         letter.append(greeting).append("\n\n");
@@ -1187,18 +1331,22 @@ public final class MainActivity extends Activity {
                 .append(profileIdentity)
                 .append(" ");
 
-        letter.append("I am interested in this opportunity because the role requires ")
+        letter.append("I am interested in this opportunity because the role calls for ")
                 .append(roleFocus)
-                .append(", which are closely aligned with the way I approach professional work.")
+                .append(", which aligns with the experience and strengths reflected in my profile.")
                 .append("\n\n");
 
-        letter.append("My experience has taught me to interpret requirements carefully, organise complex information into clear outputs, and communicate in a way that supports responsible decision-making. ");
+        if (!evidence.isEmpty()) {
+            letter.append(evidence).append(" ");
+        } else {
+            letter.append("My experience has taught me to interpret requirements carefully, organise complex information into clear outputs, and communicate in a way that supports responsible decision-making. ");
+        }
         if (!skills.isEmpty()) {
             letter.append("My profile reflects strengths in ")
                     .append(skills)
-                    .append(", and I would apply those strengths directly to the duties described in the advertisement. ");
+                    .append(", and I would apply these capabilities directly to the duties described in the advertisement. ");
         }
-        letter.append("I have considered the vacancy requirements carefully and would approach the post with the seriousness, accuracy, and accountability expected by ")
+        letter.append("I have considered the vacancy requirements carefully and would approach the post with the discipline, accuracy, and accountability expected by ")
                 .append(employer)
                 .append(".")
                 .append("\n\n");
@@ -1212,6 +1360,57 @@ public final class MainActivity extends Activity {
         }
 
         return letter.toString();
+    }
+
+    private String evidenceSentence() {
+        String experience = cleanSentence(getProfile("experience", ""));
+        if (experience.isEmpty()) {
+            return "";
+        }
+
+        String lower = experience.toLowerCase(Locale.ROOT);
+        if (lower.contains("name of organisation")
+                || lower.contains("institution :")
+                || lower.contains("course")
+                || lower.contains("responsibilities:")
+                || lower.contains("duties:")) {
+            return structuredExperienceSentence(lower);
+        }
+        if (lower.contains("assessment") || lower.contains("academic")) {
+            return "In my work across academic assessment and governance, I have coordinated complex processes, prepared documentation, and supported decisions that require accuracy and accountability.";
+        }
+        if (lower.contains("monitoring") || lower.contains("evaluation") || lower.contains("research")) {
+            return "My experience in research, monitoring, evaluation, and reporting has strengthened my ability to analyse information carefully and translate evidence into clear, practical recommendations.";
+        }
+        if (lower.contains("software") || lower.contains("digital") || lower.contains("system")) {
+            return "My digital systems experience has strengthened my ability to improve processes, manage information responsibly, and solve operational problems with a structured approach.";
+        }
+        if (lower.startsWith("i ") || lower.startsWith("my ")) {
+            return experience;
+        }
+        if (lower.startsWith("led ")
+                || lower.startsWith("managed ")
+                || lower.startsWith("coordinated ")
+                || lower.startsWith("developed ")
+                || lower.startsWith("prepared ")
+                || lower.startsWith("conducted ")) {
+            return "Through my experience, I have " + lowerFirst(experience);
+        }
+
+        return "My experience has strengthened my ability to organise complex information, communicate clearly, and deliver work with care, accuracy, and accountability.";
+    }
+
+    private String structuredExperienceSentence(String lowerExperience) {
+        if (lowerExperience.contains("assessment")) {
+            return "In my assessment and governance work, I have managed structured processes, maintained accurate records, and supported decisions that depend on reliable information.";
+        }
+        if (lowerExperience.contains("research") || lowerExperience.contains("evaluation")) {
+            return "In my research and evaluation work, I have gathered evidence, interpreted requirements, and prepared outputs that support informed decision-making.";
+        }
+        if (lowerExperience.contains("software") || lowerExperience.contains("development")) {
+            return "In my technology work, I have designed and improved digital processes while keeping user needs, reliability, and documentation in focus.";
+        }
+        return "In my professional work, I have handled structured responsibilities, communicated with stakeholders, and delivered outputs that require accuracy and judgement.";
     }
 
     private String professionalIdentitySentence(String summary) {
@@ -1379,11 +1578,243 @@ public final class MainActivity extends Activity {
         return "clear communication, organised execution, and the ability to deliver work to a dependable professional standard";
     }
 
+    private void showZ83Editor(Job job) {
+        setScrollableContent(20, 30, 34);
+
+        TextView back = label("< Review Application", 17, GREEN, Typeface.BOLD);
+        back.setOnClickListener(view -> showApplicationReview(job));
+        content.addView(back, matchWrap());
+
+        TextView title = label("Prepare Z83", 28, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.setMargins(0, dp(12), 0, dp(18));
+        content.addView(title, titleParams);
+
+        addDetailsSection(
+                "Vacancy",
+                job.title + "\n" + job.company + "\nReference: " + referenceValue(job) + "\nDate: " + today()
+        );
+
+        TextView intro = label(
+                "Complete this once, then review before each government application. The reference and application date are updated for the selected vacancy.",
+                17,
+                MUTED,
+                Typeface.BOLD
+        );
+        intro.setPadding(dp(18), dp(18), dp(18), dp(18));
+        intro.setBackground(rounded(MINT, 16));
+        content.addView(intro, cardParams());
+
+        EditText idNumber = input("ID or passport number", getZ83Value("idNumber", ""), 1);
+        EditText citizenship = input("Citizenship", getZ83Value("citizenship", "South African"), 1);
+        EditText race = input("Race / equity status", getZ83Value("race", ""), 1);
+        EditText gender = input("Gender", getZ83Value("gender", ""), 1);
+        EditText disability = input("Disability details, or Not applicable", getZ83Value("disability", "Not applicable"), 1);
+        EditText driverLicense = input("Driver's licence", getZ83Value("driverLicense", ""), 1);
+
+        content.addView(idNumber, inputParams(1));
+        content.addView(citizenship, inputParams(1));
+        content.addView(race, inputParams(1));
+        content.addView(gender, inputParams(1));
+        content.addView(disability, inputParams(1));
+        content.addView(driverLicense, inputParams(1));
+
+        LinearLayout declarationCard = vertical();
+        declarationCard.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(declarationCard);
+        content.addView(declarationCard, cardParams());
+
+        TextView declarationTitle = label("Declarations", 22, INK, Typeface.BOLD);
+        declarationCard.addView(declarationTitle, matchWrap());
+
+        Switch businessWithState = z83Switch("Do you conduct business with the State?", "businessWithState", false);
+        Switch relinquishBusiness = z83Switch("If appointed, will you relinquish those interests?", "relinquishBusiness", true);
+        Switch reappointmentCondition = z83Switch("Is there a condition preventing your reappointment?", "reappointmentCondition", false);
+        declarationCard.addView(businessWithState, matchWrap());
+        declarationCard.addView(relinquishBusiness, matchWrap());
+        declarationCard.addView(reappointmentCondition, matchWrap());
+
+        LinearLayout signatureCard = vertical();
+        signatureCard.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(signatureCard);
+        content.addView(signatureCard, cardParams());
+
+        signatureCard.addView(label("Signature and Declaration", 22, INK, Typeface.BOLD), matchWrap());
+        TextView instruction = label("Sign inside the box. You can reuse your saved signature, but you still approve it for each vacancy.", 16, MUTED, Typeface.BOLD);
+        LinearLayout.LayoutParams instructionParams = matchWrap();
+        instructionParams.setMargins(0, dp(8), 0, dp(12));
+        signatureCard.addView(instruction, instructionParams);
+
+        SignaturePadView signaturePad = new SignaturePadView(this);
+        Bitmap savedSignature = loadSavedSignature();
+        if (savedSignature != null) {
+            signaturePad.loadSignature(savedSignature);
+        }
+        signaturePad.setBackground(rounded(Color.WHITE, 12));
+        signatureCard.addView(signaturePad, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(180)));
+
+        LinearLayout signatureActions = horizontal();
+        LinearLayout.LayoutParams signatureActionParams = matchWrap();
+        signatureActionParams.setMargins(0, dp(12), 0, 0);
+        signatureCard.addView(signatureActions, signatureActionParams);
+
+        TextView useSaved = label("Use Saved Signature", 15, GREEN, Typeface.BOLD);
+        useSaved.setGravity(Gravity.CENTER);
+        useSaved.setPadding(dp(10), dp(10), dp(10), dp(10));
+        useSaved.setBackground(rounded(MINT, 20));
+        useSaved.setOnClickListener(view -> {
+            Bitmap bitmap = loadSavedSignature();
+            if (bitmap == null) {
+                toast("No saved signature yet.");
+                return;
+            }
+            signaturePad.loadSignature(bitmap);
+        });
+        signatureActions.addView(useSaved, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView clearSignature = label("Clear Signature", 15, Color.rgb(210, 54, 54), Typeface.BOLD);
+        clearSignature.setGravity(Gravity.CENTER);
+        clearSignature.setPadding(dp(10), dp(10), dp(10), dp(10));
+        clearSignature.setOnClickListener(view -> signaturePad.clearSignature());
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        clearParams.setMargins(dp(10), 0, 0, 0);
+        signatureActions.addView(clearSignature, clearParams);
+
+        Switch confirm = new Switch(this);
+        confirm.setText("I confirm that this Z83 information is complete and correct for this application.");
+        confirm.setTextSize(16);
+        confirm.setTextColor(INK);
+        confirm.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        confirm.setChecked(isZ83Ready(job));
+        LinearLayout.LayoutParams confirmParams = matchWrap();
+        confirmParams.setMargins(0, dp(14), 0, 0);
+        signatureCard.addView(confirm, confirmParams);
+
+        TextView save = button("Save Z83 For This Vacancy", GREEN, Color.WHITE);
+        save.setOnClickListener(view -> {
+            if (!signaturePad.hasSignature()) {
+                toast("Please sign the Z83 before saving.");
+                return;
+            }
+            if (!confirm.isChecked()) {
+                toast("Please confirm the declaration before saving.");
+                return;
+            }
+
+            preferences.edit()
+                    .putString("z83.idNumber", value(idNumber))
+                    .putString("z83.citizenship", value(citizenship))
+                    .putString("z83.race", value(race))
+                    .putString("z83.gender", value(gender))
+                    .putString("z83.disability", value(disability))
+                    .putString("z83.driverLicense", value(driverLicense))
+                    .putBoolean("z83.businessWithState", businessWithState.isChecked())
+                    .putBoolean("z83.relinquishBusiness", relinquishBusiness.isChecked())
+                    .putBoolean("z83.reappointmentCondition", reappointmentCondition.isChecked())
+                    .putBoolean(z83ReadyKey(job), true)
+                    .putString(z83DateKey(job), today())
+                    .apply();
+            saveSignature(signaturePad);
+            showApplicationReview(job);
+        });
+        LinearLayout.LayoutParams saveParams = matchHeight(dp(60));
+        saveParams.setMargins(0, dp(18), 0, dp(18));
+        content.addView(save, saveParams);
+    }
+
+    private Switch z83Switch(String text, String key, boolean fallback) {
+        Switch item = new Switch(this);
+        item.setText(text);
+        item.setTextSize(16);
+        item.setTextColor(INK);
+        item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        item.setPadding(0, dp(12), 0, dp(8));
+        item.setChecked(preferences.getBoolean("z83." + key, fallback));
+        return item;
+    }
+
+    private String getZ83Value(String key, String fallback) {
+        return preferences == null ? fallback : preferences.getString("z83." + key, fallback);
+    }
+
+    private boolean isZ83Ready(Job job) {
+        return preferences != null && preferences.getBoolean(z83ReadyKey(job), false);
+    }
+
+    private String z83ReadyKey(Job job) {
+        return "z83.ready." + documentSafeName(jobKey(job));
+    }
+
+    private String z83DateKey(Job job) {
+        return "z83.date." + documentSafeName(jobKey(job));
+    }
+
+    private String z83Summary(Job job) {
+        return "Z83 APPLICATION SUMMARY\n\n"
+                + "Vacancy: " + job.title + "\n"
+                + "Department: " + job.company + "\n"
+                + "Reference: " + referenceValue(job) + "\n"
+                + "Application date: " + today() + "\n\n"
+                + "Applicant: " + getProfile("name", "") + "\n"
+                + "Email: " + getProfile("email", "") + "\n"
+                + "Phone: " + getProfile("phone", "") + "\n"
+                + "Location: " + getProfile("location", "") + "\n"
+                + "ID / Passport: " + getZ83Value("idNumber", "") + "\n"
+                + "Citizenship: " + getZ83Value("citizenship", "South African") + "\n"
+                + "Race / equity status: " + getZ83Value("race", "") + "\n"
+                + "Gender: " + getZ83Value("gender", "") + "\n"
+                + "Disability: " + getZ83Value("disability", "Not applicable") + "\n"
+                + "Driver's licence: " + getZ83Value("driverLicense", "") + "\n\n"
+                + "Conducts business with the State: " + yesNo(preferences.getBoolean("z83.businessWithState", false)) + "\n"
+                + "Will relinquish business interests if appointed: " + yesNo(preferences.getBoolean("z83.relinquishBusiness", true)) + "\n"
+                + "Condition preventing reappointment: " + yesNo(preferences.getBoolean("z83.reappointmentCondition", false)) + "\n\n"
+                + "Signature saved in app: " + yesNo(loadSavedSignature() != null) + "\n"
+                + "Declaration confirmed for this vacancy: " + yesNo(isZ83Ready(job));
+    }
+
+    private String yesNo(boolean value) {
+        return value ? "Yes" : "No";
+    }
+
+    private void saveSignature(SignaturePadView signaturePad) {
+        if (signaturePad.getWidth() <= 0 || signaturePad.getHeight() <= 0) {
+            return;
+        }
+        Bitmap bitmap = signaturePad.signatureBitmap();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
+        String encoded = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
+        preferences.edit().putString("z83.signature", encoded).apply();
+    }
+
+    private Bitmap loadSavedSignature() {
+        if (preferences == null) {
+            return null;
+        }
+        String encoded = preferences.getString("z83.signature", "");
+        if (encoded == null || encoded.trim().isEmpty()) {
+            return null;
+        }
+        byte[] bytes = Base64.decode(encoded, Base64.NO_WRAP);
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+    }
+
     private void routeApplication(Job job) {
         routeApplication(job, cvDraft(job), coverLetterDraft(job), emailDraft(job));
     }
 
     private void routeApplication(Job job, String cvText, String coverLetter, String applicationEmail) {
+        if (isGovernmentMethod(job) && !isZ83Ready(job)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Prepare Z83 first")
+                    .setMessage("This is a government vacancy. Review and sign the Z83 before Let’s Apply opens the email app or official portal.")
+                    .setPositiveButton("Prepare Z83", (dialog, which) -> showZ83Editor(job))
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            return;
+        }
+
         if (isEmailMethod(job)) {
             trackApplication(job, "Email draft prepared", cvText, coverLetter, applicationEmail);
             openEmailApplication(job, applicationEmail, coverLetter, cvText);
@@ -1422,32 +1853,105 @@ public final class MainActivity extends Activity {
 
         String subject = "Application: " + job.title + referenceSuffix(job);
         String body = emailBody
-                + "\n\n--- Cover Letter ---\n"
-                + coverLetter
-                + "\n\n--- CV Draft ---\n"
-                + cvText;
+                + "\n\nLet’s Apply has prepared the supporting documents for review before sending.";
 
-        Intent intent = new Intent(Intent.ACTION_SENDTO);
-        intent.setData(Uri.parse("mailto:" + Uri.encode(job.applicationEmail.trim())));
-        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
-        intent.putExtra(Intent.EXTRA_TEXT, body);
+        try {
+            ArrayList<Uri> attachments = applicationDocumentUris(job, cvText, coverLetter, emailBody);
+            Intent intent = new Intent(Intent.ACTION_SEND_MULTIPLE);
+            intent.setType("message/rfc822");
+            intent.putExtra(Intent.EXTRA_EMAIL, new String[]{job.applicationEmail.trim()});
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+            intent.putExtra(Intent.EXTRA_TEXT, body);
+            intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, attachments);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-        if (intent.resolveActivity(getPackageManager()) == null) {
-            showMissingEmailApp(job, subject, body);
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                showMissingEmailApp(job, subject, fullApplicationText(job, cvText, coverLetter, emailBody));
+                return;
+            }
+
+            startActivity(Intent.createChooser(intent, "Send application email"));
+        } catch (IOException error) {
+            showMissingEmailApp(job, subject, fullApplicationText(job, cvText, coverLetter, emailBody));
+        }
+    }
+
+    private ArrayList<Uri> applicationDocumentUris(Job job, String cvText, String coverLetter, String applicationEmail) throws IOException {
+        ArrayList<Uri> uris = new ArrayList<>();
+        String baseName = documentSafeName(job.title + "_" + referenceValue(job));
+        uris.add(writeApplicationDocument(baseName + "_cv.txt", cvText));
+        uris.add(writeApplicationDocument(baseName + "_cover_letter.txt", coverLetter));
+        uris.add(writeApplicationDocument(baseName + "_email_draft.txt", applicationEmail));
+
+        if (isGovernmentMethod(job)) {
+            uris.add(writeApplicationDocument(baseName + "_z83_summary.txt", z83Summary(job)));
+        }
+
+        return uris;
+    }
+
+    private Uri writeApplicationDocument(String fileName, String text) throws IOException {
+        File directory = new File(getCacheDir(), "application_documents");
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IOException("Could not create application document folder.");
+        }
+
+        File file = new File(directory, documentSafeName(fileName.replace(".txt", "")) + ".txt");
+        FileOutputStream output = new FileOutputStream(file);
+        output.write((text == null ? "" : text).getBytes("UTF-8"));
+        output.close();
+
+        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+    }
+
+    private String fullApplicationText(Job job, String cvText, String coverLetter, String applicationEmail) {
+        StringBuilder text = new StringBuilder();
+        text.append("Application package prepared by Let's Apply\n\n")
+                .append("Job: ").append(job.title).append("\n")
+                .append("Employer: ").append(job.company).append("\n")
+                .append("Reference: ").append(referenceValue(job)).append("\n");
+
+        if (isGovernmentMethod(job)) {
+            text.append("\nZ83 SUMMARY\n").append(z83Summary(job)).append("\n");
+        }
+
+        text.append("\nAPPLICATION EMAIL\n")
+                .append(applicationEmail)
+                .append("\n\nCOVER LETTER\n")
+                .append(coverLetter)
+                .append("\n\nCV DRAFT\n")
+                .append(cvText);
+
+        return text.toString();
+    }
+
+    private String documentSafeName(String value) {
+        String cleaned = value == null ? "" : value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        if (cleaned.isEmpty()) {
+            return "lets_apply_document";
+        }
+        return cleaned;
+    }
+
+    private void openWebsiteAfterDocumentPrompt(Job job, String cvText, String coverLetter, String applicationEmail) {
+        if (job.applicationUrl == null || job.applicationUrl.trim().isEmpty()) {
+            showMissingApplicationContact(job);
             return;
         }
 
-        startActivity(intent);
+        new AlertDialog.Builder(this)
+                .setTitle("Open official application site?")
+                .setMessage("Share or save the prepared CV, cover letter, and Z83 summary first. Then open the official website and attach the documents there.")
+                .setPositiveButton("Open Website", (dialog, which) -> openApplicationWebsite(job))
+                .setNeutralButton("Share Documents", (dialog, which) -> shareApplicationDocuments(job, cvText, coverLetter, applicationEmail))
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showWebsiteApplicationHandoff(Job job, String cvText, String coverLetter, String applicationEmail) {
-        new AlertDialog.Builder(this)
-                .setTitle("Open employer website?")
-                .setMessage("Your CV draft, cover letter, and application email are prepared. Share or copy them first if you need to attach them on the employer website.")
-                .setPositiveButton("Open Website", (dialog, which) -> openApplicationWebsite(job))
-                .setNeutralButton("Share Docs", (dialog, which) -> shareApplicationDocuments(job, cvText, coverLetter, applicationEmail))
-                .setNegativeButton("Cancel", null)
-                .show();
+        openWebsiteAfterDocumentPrompt(job, cvText, coverLetter, applicationEmail);
     }
 
     private String emailDraft(Job job) {
@@ -1474,22 +1978,23 @@ public final class MainActivity extends Activity {
 
     private void shareApplicationDocuments(Job job, String cvText, String coverLetter, String applicationEmail) {
         String subject = "Application: " + job.title + referenceSuffix(job);
-        String text = "Application package prepared by Let's Apply\n\n"
-                + "Job: " + job.title + "\n"
-                + "Employer: " + job.company + "\n"
-                + "Reference: " + referenceValue(job) + "\n\n"
-                + "APPLICATION EMAIL\n"
-                + applicationEmail + "\n\n"
-                + "COVER LETTER\n"
-                + coverLetter + "\n\n"
-                + "CV DRAFT\n"
-                + cvText;
+        String text = fullApplicationText(job, cvText, coverLetter, applicationEmail);
 
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
-        intent.putExtra(Intent.EXTRA_TEXT, text);
-        startActivity(Intent.createChooser(intent, "Share application documents"));
+        try {
+            Intent intent = new Intent(Intent.ACTION_SEND_MULTIPLE);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+            intent.putExtra(Intent.EXTRA_TEXT, "Prepared application documents for " + job.title + ".");
+            intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, applicationDocumentUris(job, cvText, coverLetter, applicationEmail));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(intent, "Share application documents"));
+        } catch (IOException error) {
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+            intent.putExtra(Intent.EXTRA_TEXT, text);
+            startActivity(Intent.createChooser(intent, "Share application documents"));
+        }
     }
 
     private void openApplicationWebsite(Job job) {
@@ -1558,10 +2063,20 @@ public final class MainActivity extends Activity {
     }
 
     private void addDetailsSection(String heading, String body) {
-        TextView section = label(heading + "\n\n" + body, 18, INK, Typeface.BOLD);
-        section.setTextColor(INK);
+        LinearLayout section = vertical();
         section.setPadding(dp(18), dp(18), dp(18), dp(18));
         applyCardStyle(section);
+
+        TextView headingView = label(heading, 22, INK, Typeface.BOLD);
+        section.addView(headingView, matchWrap());
+
+        TextView bodyView = label(body == null || body.trim().isEmpty() ? "Not listed." : body.trim(), 16, MUTED, Typeface.NORMAL);
+        bodyView.setLineSpacing(dp(3), 1.0f);
+        bodyView.setTextIsSelectable(true);
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.setMargins(0, dp(12), 0, 0);
+        section.addView(bodyView, bodyParams);
+
         LinearLayout.LayoutParams params = cardParams();
         params.setMargins(0, 0, 0, dp(14));
         content.addView(section, params);
