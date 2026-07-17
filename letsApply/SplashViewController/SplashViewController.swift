@@ -50,7 +50,7 @@ class SplashViewController: UIViewController {
 
     private lazy var taglineLabel: UILabel = {
         let label = UILabel()
-        label.text = "Find work that fits your future."
+        label.text = "Let help you Find work that fits your future."
         label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
         label.textAlignment = .center
         label.textColor = UIColor.white.withAlphaComponent(0.68)
