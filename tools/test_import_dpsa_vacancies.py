@@ -1,12 +1,14 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from import_dpsa_vacancies import (
     DPSA_NEWSROOM_URL,
+    DPSA_PSV_URL,
     discover_latest_pdf,
     inject_click_here_links,
     parse_experience,
     parse_jobs,
+    resolve_circular_pdf_url,
 )
 
 
@@ -192,6 +194,38 @@ DUTIES : Provide administration.
             "https://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2022%20of%202026.pdf",
         )
         fetch_url.assert_called_once_with(DPSA_NEWSROOM_URL)
+
+    @patch("import_dpsa_vacancies.fetch_url")
+    def test_latest_circular_falls_back_to_psv_listing(self, fetch_url):
+        fetch_url.side_effect = [
+            RuntimeError("temporary DPSA newsroom TLS failure"),
+            b"""
+            <a href="/documents/PSV%20CIRCULAR%2023%20of%202026.pdf">Current</a>
+            """,
+        ]
+
+        result = discover_latest_pdf()
+
+        self.assertEqual(
+            result,
+            "https://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2023%20of%202026.pdf",
+        )
+        fetch_url.assert_has_calls([call(DPSA_NEWSROOM_URL), call(DPSA_PSV_URL)])
+
+    @patch("import_dpsa_vacancies.fetch_url")
+    def test_manual_url_can_point_to_circular_page(self, fetch_url):
+        fetch_url.return_value = b"""
+        <a href="/documents/PSV%20CIRCULAR%2022%20of%202026.pdf">Download circular</a>
+        """
+
+        result = resolve_circular_pdf_url(
+            "https://www.dpsa.gov.za/newsroom/psvc/circular-22-of-2026/"
+        )
+
+        self.assertEqual(
+            result,
+            "https://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2022%20of%202026.pdf",
+        )
 
 
 if __name__ == "__main__":
