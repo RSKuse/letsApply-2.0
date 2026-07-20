@@ -13,7 +13,7 @@ final class SalaryFormatter {
         }
 
         String symbol = symbolFor(currency);
-        String suffix = period == null || period.trim().isEmpty() ? "per annum" : period.trim();
+        String suffix = suffixFor(period);
 
         if (min > 0 && max > 0 && min != max) {
             return symbol + formatNumber(min) + " to " + symbol + formatNumber(max) + " " + suffix;
@@ -39,6 +39,40 @@ final class SalaryFormatter {
                 return "€";
             default:
                 return currency.toUpperCase(Locale.ROOT) + " ";
+        }
+    }
+
+    private static String suffixFor(String period) {
+        if (period == null || period.trim().isEmpty()) {
+            return "per annum";
+        }
+
+        String cleaned = period.trim();
+        String normalized = cleaned.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("per ")) {
+            return cleaned;
+        }
+
+        switch (normalized) {
+            case "annum":
+            case "annual":
+            case "year":
+            case "yearly":
+                return "per annum";
+            case "month":
+            case "monthly":
+                return "per month";
+            case "week":
+            case "weekly":
+                return "per week";
+            case "hour":
+            case "hourly":
+                return "per hour";
+            case "day":
+            case "daily":
+                return "per day";
+            default:
+                return cleaned;
         }
     }
 

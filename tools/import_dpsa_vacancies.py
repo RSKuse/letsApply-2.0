@@ -22,7 +22,18 @@ from pathlib import Path
 
 DPSA_NEWSROOM_URL = "https://www.dpsa.gov.za/newsroom/"
 DPSA_PSV_URL = "https://www.dpsa.gov.za/newsroom/psvc/"
-DISCOVERY_URLS = (DPSA_NEWSROOM_URL, DPSA_PSV_URL)
+DPSA_NEWSROOM_HTTP_URL = "http://www.dpsa.gov.za/newsroom/"
+DPSA_PSV_HTTP_URL = "http://www.dpsa.gov.za/newsroom/psvc/"
+KNOWN_CURRENT_DPSA_PDF_URL = (
+    "http://www.dpsa.gov.za/dpsa2g/documents/vacancies/2026/"
+    "PSV%20CIRCULAR%2025%20of%202026.pdf"
+)
+DISCOVERY_URLS = (
+    DPSA_NEWSROOM_URL,
+    DPSA_PSV_URL,
+    DPSA_PSV_HTTP_URL,
+    DPSA_NEWSROOM_HTTP_URL,
+)
 RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 OFFICIAL_PDF_PATTERN = re.compile(
     r"""href=["']([^"']*PSV(?:%20|\s)*CIRCULAR(?:%20|\s)*\d+(?:%20|\s)*of(?:%20|\s)*\d+\.pdf)["']""",
@@ -65,7 +76,15 @@ NUMBER_WORDS = {
 }
 
 
+def normalize_dpsa_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.netloc.lower() == "dpsa.gov.za":
+        return urllib.parse.urlunparse(parsed._replace(netloc="www.dpsa.gov.za"))
+    return url
+
+
 def fetch_url(url: str, attempts: int = 4) -> bytes:
+    url = normalize_dpsa_url(url)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (compatible; LetsApplyVacancyImporter/1.0; "
@@ -130,6 +149,7 @@ def full_circular_pdf_from_page(page: str, base_url: str) -> str:
 
 
 def resolve_circular_pdf_url(url: str) -> str:
+    url = normalize_dpsa_url(url)
     if urllib.parse.urlparse(url).path.lower().endswith(".pdf"):
         return url
 
@@ -157,6 +177,13 @@ def discover_latest_pdf() -> str:
                     errors.append(f"{circular_page_url}: {error}")
         except Exception as error:
             errors.append(f"{index_url}: {error}")
+
+    fallback_url = os.environ.get("DPSA_FALLBACK_PDF_URL", KNOWN_CURRENT_DPSA_PDF_URL).strip()
+    if fallback_url:
+        try:
+            return resolve_circular_pdf_url(fallback_url)
+        except Exception as error:
+            errors.append(f"{fallback_url}: {error}")
 
     details = " | ".join(errors) if errors else "No candidate circular pages were found."
     raise RuntimeError(f"No official DPSA circular PDF could be discovered. {details}")

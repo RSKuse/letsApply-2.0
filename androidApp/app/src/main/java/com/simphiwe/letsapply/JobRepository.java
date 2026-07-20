@@ -82,7 +82,8 @@ final class JobRepository {
 
     List<Job> filter(String query, String filter) {
         String normalizedQuery = query == null ? "" : query.toLowerCase(Locale.ROOT).trim();
-        String normalizedFilter = filter == null ? "All" : filter;
+        String normalizedFilter = filter == null || filter.trim().isEmpty() ? "All" : filter.trim();
+        String lowerFilter = normalizedFilter.toLowerCase(Locale.ROOT);
         List<Job> results = new ArrayList<>();
 
         for (Job job : jobs) {
@@ -91,20 +92,37 @@ final class JobRepository {
                     || job.company.toLowerCase(Locale.ROOT).contains(normalizedQuery)
                     || job.requirements.toLowerCase(Locale.ROOT).contains(normalizedQuery);
 
-            boolean matchesFilter = "All".equals(normalizedFilter)
-                    || ("Remote".equals(normalizedFilter) && job.remote)
-                    || ("Hybrid".equals(normalizedFilter) && job.type.toLowerCase(Locale.ROOT).contains("hybrid"))
-                    || ("Featured".equals(normalizedFilter) && job.featured)
-                    || ("Government".equals(normalizedFilter) && job.method.startsWith("government"))
-                    || ("Public Service".equals(normalizedFilter) && job.method.startsWith("government"))
-                    || ("Permanent".equals(normalizedFilter) && job.type.equalsIgnoreCase("Permanent"))
-                    || ("Contract".equals(normalizedFilter) && job.type.equalsIgnoreCase("Contract"));
+            boolean matchesKnownFilter = "all".equals(lowerFilter)
+                    || ("remote".equals(lowerFilter) && job.remote)
+                    || ("hybrid".equals(lowerFilter) && job.type.toLowerCase(Locale.ROOT).contains("hybrid"))
+                    || ("featured".equals(lowerFilter) && job.featured)
+                    || ("government".equals(lowerFilter) && job.method.startsWith("government"))
+                    || ("public service".equals(lowerFilter) && job.method.startsWith("government"))
+                    || ("permanent".equals(lowerFilter) && job.type.equalsIgnoreCase("Permanent"))
+                    || ("contract".equals(lowerFilter) && job.type.equalsIgnoreCase("Contract"));
 
-            if (matchesQuery && matchesFilter) {
+            boolean customFilter = !isKnownFilter(lowerFilter)
+                    && (job.company.toLowerCase(Locale.ROOT).contains(lowerFilter)
+                    || job.source.toLowerCase(Locale.ROOT).contains(lowerFilter)
+                    || job.location.toLowerCase(Locale.ROOT).contains(lowerFilter)
+                    || job.type.toLowerCase(Locale.ROOT).contains(lowerFilter));
+
+            if (matchesQuery && (matchesKnownFilter || customFilter)) {
                 results.add(job);
             }
         }
 
         return results;
+    }
+
+    private boolean isKnownFilter(String filter) {
+        return "all".equals(filter)
+                || "remote".equals(filter)
+                || "hybrid".equals(filter)
+                || "featured".equals(filter)
+                || "government".equals(filter)
+                || "public service".equals(filter)
+                || "permanent".equals(filter)
+                || "contract".equals(filter);
     }
 }

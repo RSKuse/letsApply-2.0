@@ -15,6 +15,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -106,6 +107,7 @@ public final class MainActivity extends Activity {
         firestoreRepository.fetchPublishedJobs(new JobLoadCallback() {
             @Override
             public void onJobsLoaded(List<Job> jobs) {
+                Log.d("LetsApplyJobs", "Applying remote job payload: " + jobs.size());
                 repository.replaceJobs(jobs);
                 if (content != null) {
                     runOnUiThread(() -> showMain(currentTab));
@@ -114,6 +116,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onFallbackRequired(String reason) {
+                Log.w("LetsApplyJobs", "Using preview jobs because Firebase load failed: " + reason);
                 // Local preview jobs remain available while Firebase setup is being completed.
             }
         });
@@ -393,14 +396,6 @@ public final class MainActivity extends Activity {
 
         addFilters();
 
-        TextView filterTitle = label(selectedFilter, 18, selectedFilter.equals("All") ? INK : GREEN, Typeface.BOLD);
-        filterTitle.setGravity(Gravity.CENTER);
-        filterTitle.setPadding(0, dp(12), 0, dp(14));
-        filterTitle.setBackground(rounded(selectedFilter.equals("All") ? MINT : Color.WHITE, 12));
-        LinearLayout.LayoutParams filterTitleParams = matchWrap();
-        filterTitleParams.setMargins(0, 0, 0, dp(16));
-        content.addView(filterTitle, filterTitleParams);
-
         LinearLayout results = vertical();
         results.setTag("jobResults");
         content.addView(results, matchWrap());
@@ -409,27 +404,110 @@ public final class MainActivity extends Activity {
     }
 
     private void addFilters() {
-        HorizontalScrollView scroller = new HorizontalScrollView(this);
-        scroller.setHorizontalScrollBarEnabled(false);
-        LinearLayout row = horizontal();
-        row.setPadding(0, 0, 0, dp(14));
-        scroller.addView(row);
-        content.addView(scroller, matchWrap());
+        LinearLayout panel = vertical();
+        panel.setPadding(dp(12), dp(12), dp(12), dp(12));
+        panel.setBackground(rounded(Color.WHITE, 18));
+        LinearLayout.LayoutParams panelParams = matchWrap();
+        panelParams.setMargins(0, 0, 0, dp(18));
+        content.addView(panel, panelParams);
 
-        String[] filters = {"All", "Remote", "Hybrid", "Featured", "Public Service", "Permanent", "Contract"};
-        for (String filter : filters) {
-            TextView chip = label(filter, 15, selectedFilter.equals(filter) ? Color.WHITE : GREEN, Typeface.BOLD);
-            chip.setGravity(Gravity.CENTER);
-            chip.setPadding(dp(18), dp(10), dp(18), dp(10));
-            chip.setBackground(rounded(selectedFilter.equals(filter) ? GREEN : MINT, 22));
-            chip.setOnClickListener(view -> {
-                selectedFilter = filter;
-                showMain("Jobs");
-            });
-            LinearLayout.LayoutParams chipParams = wrapWrap();
-            chipParams.setMargins(0, 0, dp(10), 0);
-            row.addView(chip, chipParams);
+        LinearLayout firstRow = horizontal();
+        LinearLayout secondRow = horizontal();
+        panel.addView(firstRow, matchHeight(dp(50)));
+
+        LinearLayout.LayoutParams secondRowParams = matchHeight(dp(50));
+        secondRowParams.setMargins(0, dp(8), 0, 0);
+        panel.addView(secondRow, secondRowParams);
+
+        addFilterChip(firstRow, "All", "All", true);
+        addFilterChip(firstRow, "Remote", "Remote", true);
+        addFilterChip(firstRow, "Hybrid", "Hybrid", true);
+        addFilterChip(firstRow, "Featured", "Featured", false);
+
+        addFilterChip(secondRow, "Government", "Government", true);
+        addFilterChip(secondRow, "Permanent", "Permanent", true);
+        addFilterChip(secondRow, "Contract", "Contract", true);
+        addDepartmentChip(secondRow);
+
+        TextView count = label(repository.filter(searchText, selectedFilter).size() + " opportunities", 15, MUTED, Typeface.BOLD);
+        LinearLayout.LayoutParams countParams = matchWrap();
+        countParams.setMargins(dp(2), dp(12), 0, 0);
+        panel.addView(count, countParams);
+    }
+
+    private void addFilterChip(LinearLayout row, String label, String filter, boolean addRightMargin) {
+        boolean selected = selectedFilter.equals(filter);
+        TextView chip = label(label, 14, selected ? Color.WHITE : INK, Typeface.BOLD);
+        chip.setGravity(Gravity.CENTER);
+        chip.setSingleLine(true);
+        chip.setBackground(rounded(selected ? GREEN : SURFACE, 12));
+        chip.setOnClickListener(view -> {
+            selectedFilter = filter;
+            showMain("Jobs");
+        });
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+        params.setMargins(0, 0, addRightMargin ? dp(8) : 0, 0);
+        row.addView(chip, params);
+    }
+
+    private void addDepartmentChip(LinearLayout row) {
+        boolean selected = isDepartmentFilter(selectedFilter);
+        TextView chip = label(selected ? "Dept. selected" : "Dept.", 14, selected ? Color.WHITE : INK, Typeface.BOLD);
+        chip.setGravity(Gravity.CENTER);
+        chip.setSingleLine(true);
+        chip.setBackground(rounded(selected ? GREEN : SURFACE, 12));
+        chip.setOnClickListener(view -> showDepartmentFilterDialog());
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+        row.addView(chip, params);
+    }
+
+    private boolean isDepartmentFilter(String filter) {
+        if (filter == null || filter.trim().isEmpty()) {
+            return false;
         }
+
+        String[] systemFilters = {"All", "Remote", "Hybrid", "Featured", "Government", "Public Service", "Permanent", "Contract"};
+        for (String systemFilter : systemFilters) {
+            if (systemFilter.equals(filter)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void showDepartmentFilterDialog() {
+        List<String> departments = departmentFilters();
+        if (departments.isEmpty()) {
+            toast("No departments available yet.");
+            return;
+        }
+
+        String[] items = departments.toArray(new String[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("Choose department")
+                .setItems(items, (dialog, which) -> {
+                    selectedFilter = items[which];
+                    showMain("Jobs");
+                })
+                .setNegativeButton("Clear", (dialog, which) -> {
+                    selectedFilter = "All";
+                    showMain("Jobs");
+                })
+                .show();
+    }
+
+    private List<String> departmentFilters() {
+        Set<String> names = new LinkedHashSet<>();
+        for (Job job : repository.allJobs()) {
+            if (job.method.startsWith("government") && job.company != null && !job.company.trim().isEmpty()) {
+                names.add(job.company.trim());
+            }
+        }
+
+        return new ArrayList<>(names);
     }
 
     private void renderJobResults() {
@@ -1083,11 +1161,7 @@ public final class MainActivity extends Activity {
         }
         addDetailsSection("Required Checklist", checklistFor(job));
 
-        TextView score = label(jobFitCopy(job), 20, GREEN, Typeface.BOLD);
-        score.setGravity(Gravity.CENTER);
-        score.setPadding(dp(18), dp(18), dp(18), dp(18));
-        applyCardStyle(score);
-        content.addView(score, cardParams());
+        addJobFitCard(job);
 
         String tailoredCv = cvDraft(job);
         String coverLetter = coverLetterDraft(job);
@@ -1102,11 +1176,11 @@ public final class MainActivity extends Activity {
         documentActionParams.setMargins(0, 0, 0, dp(12));
         content.addView(documentActions, documentActionParams);
 
-        TextView copy = button("Copy Letter", MINT, GREEN);
+        TextView copy = button("Copy Cover Letter", MINT, GREEN);
         copy.setOnClickListener(view -> copyToClipboard("Cover Letter", coverLetter));
         documentActions.addView(copy, new LinearLayout.LayoutParams(0, dp(56), 1));
 
-        TextView share = button("Share Docs", MINT, GREEN);
+        TextView share = button("Share Documents", MINT, GREEN);
         share.setOnClickListener(view -> shareApplicationDocuments(job, tailoredCv, coverLetter, applicationEmail));
         LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(0, dp(56), 1);
         shareParams.setMargins(dp(10), 0, 0, 0);
@@ -1120,22 +1194,23 @@ public final class MainActivity extends Activity {
     }
 
     private String applicationCopy(Job job) {
+        String destination = applicationDestinationLine(job);
         if (isGovernmentMethod(job)) {
             if (isEmailMethod(job)) {
-                return "Review the Z83 requirement, reference number, CV, and supporting documents. Submit Application then opens your email app with the government application draft.";
+                return "Review the Z83 requirement, reference number, CV, and supporting documents. Submit Application then opens your email app with the government application draft.\n\n" + destination;
             }
             if (isWebsiteMethod(job)) {
-                return "Review the Z83 requirement, reference number, CV, and supporting documents. Submit Application then opens the official government application website.";
+                return "Review the Z83 requirement, reference number, CV, and supporting documents. Submit Application then opens the official government application website.\n\n" + destination;
             }
-            return "Review the Z83 requirement, reference number, CV, and supporting document checklist before you submit.";
+            return "Review the Z83 requirement, reference number, CV, and supporting document checklist before you submit.\n\n" + destination;
         }
 
         if (isEmailMethod(job)) {
-            return "Let's Apply prepares your subject line and email draft. Your email app opens so you can review and press Send yourself.";
+            return "Let's Apply prepares your subject line and email draft. Your email app opens so you can review and press Send yourself.\n\n" + destination;
         }
 
         if (isWebsiteMethod(job)) {
-            return "Let's Apply prepares your documents first, then opens the employer website so you can complete the official form.";
+            return "Let's Apply prepares your documents first, then opens the employer website so you can complete the official form.\n\n" + destination;
         }
 
         if ("manualInstruction".equals(job.method)) {
@@ -1143,6 +1218,16 @@ public final class MainActivity extends Activity {
         }
 
         return "This vacancy can be submitted inside Let's Apply and tracked in your applications.";
+    }
+
+    private String applicationDestinationLine(Job job) {
+        if (hasApplicationEmail(job)) {
+            return "Destination email: " + job.applicationEmail.trim();
+        }
+        if (hasApplicationUrl(job)) {
+            return "Application portal: " + job.applicationUrl.trim();
+        }
+        return "Destination: not listed yet";
     }
 
     private String checklistFor(Job job) {
@@ -1161,6 +1246,60 @@ public final class MainActivity extends Activity {
             builder.append("Official portal link checked\n");
         }
         return builder.toString().trim();
+    }
+
+    private void addJobFitCard(Job job) {
+        LinearLayout card = vertical();
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        applyCardStyle(card);
+
+        TextView heading = label("Job Fit", 22, INK, Typeface.BOLD);
+        card.addView(heading, matchWrap());
+
+        TextView percent = label(matchScore(job) + "%", 52, GREEN, Typeface.BOLD);
+        percent.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams percentParams = matchWrap();
+        percentParams.setMargins(0, dp(12), 0, dp(2));
+        card.addView(percent, percentParams);
+
+        TextView summary = label("Your profile currently matches this vacancy by " + matchScore(job) + "%. Review the prepared CV and cover letter before submitting.", 16, MUTED, Typeface.BOLD);
+        summary.setGravity(Gravity.CENTER);
+        summary.setLineSpacing(dp(3), 1.0f);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.setMargins(0, 0, 0, dp(14));
+        card.addView(summary, summaryParams);
+
+        List<String> matched = matchedKeywords(job);
+        List<String> missing = missingKeywords(job);
+        String matchedText = matched.isEmpty()
+                ? "Your profile shows general professional fit for this vacancy."
+                : sentenceCase(joinHuman(matched, 5));
+        String missingText = missing.isEmpty()
+                ? "No major keyword gaps were detected from the current advert."
+                : sentenceCase(joinHuman(missing, 5));
+
+        card.addView(jobFitInsight("Matched strengths", matchedText), matchWrap());
+        LinearLayout.LayoutParams gapParams = matchWrap();
+        gapParams.setMargins(0, dp(10), 0, 0);
+        card.addView(jobFitInsight("Improve before submitting", missingText), gapParams);
+
+        content.addView(card, cardParams());
+    }
+
+    private LinearLayout jobFitInsight(String title, String body) {
+        LinearLayout box = vertical();
+        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+        box.setBackground(rounded(MINT, 14));
+
+        TextView titleView = label(title, 15, DARK_GREEN, Typeface.BOLD);
+        box.addView(titleView, matchWrap());
+
+        TextView bodyView = label(body, 15, MUTED, Typeface.NORMAL);
+        bodyView.setLineSpacing(dp(3), 1.0f);
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.setMargins(0, dp(4), 0, 0);
+        box.addView(bodyView, bodyParams);
+        return box;
     }
 
     private void addZ83PreparationCard(Job job) {
@@ -1304,6 +1443,14 @@ public final class MainActivity extends Activity {
         return builder.toString();
     }
 
+    private String sentenceCase(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "";
+        }
+        String cleaned = value.trim();
+        return cleaned.substring(0, 1).toUpperCase(Locale.ROOT) + cleaned.substring(1);
+    }
+
     private String coverLetterDraft(Job job) {
         String greeting = isGovernmentMethod(job) ? "Dear Selection Committee," : "Dear Hiring Manager,";
         String profileSummary = cleanSentence(getProfile("summary", ""));
@@ -1311,6 +1458,7 @@ public final class MainActivity extends Activity {
         String roleFocus = roleFocus(job);
         String applicantName = getProfile("name", "");
         String employer = employerPhrase(job.company);
+        String jobTitle = coverLetterJobTitle(job);
         String profileIdentity = professionalIdentitySentence(profileSummary);
         String evidence = evidenceSentence();
 
@@ -1318,35 +1466,36 @@ public final class MainActivity extends Activity {
         letter.append(greeting).append("\n\n");
         if (isGovernmentMethod(job)) {
             letter.append("APPLICATION FOR THE POSITION OF ")
-                    .append(job.title.toUpperCase(Locale.ROOT))
+                    .append(jobTitle.toUpperCase(Locale.ROOT))
                     .append(referenceSuffix(job).toUpperCase(Locale.ROOT))
                     .append("\n\n");
         }
 
         letter.append("I am writing to apply for the ")
-                .append(job.title)
+                .append(jobTitle)
                 .append(" position at ")
                 .append(employer)
                 .append(". ")
                 .append(profileIdentity)
-                .append(" ");
-
-        letter.append("I am interested in this opportunity because the role calls for ")
+                .append(" I am interested in this opportunity because the role calls for ")
                 .append(roleFocus)
-                .append(", which aligns with the experience and strengths reflected in my profile.")
+                .append(".")
                 .append("\n\n");
 
+        letter.append("In reviewing the advertisement, I understand that the successful candidate will need to ")
+                .append(advertNeedSentence(job))
+                .append(". ");
         if (!evidence.isEmpty()) {
             letter.append(evidence).append(" ");
         } else {
             letter.append("My experience has taught me to interpret requirements carefully, organise complex information into clear outputs, and communicate in a way that supports responsible decision-making. ");
         }
         if (!skills.isEmpty()) {
-            letter.append("My profile reflects strengths in ")
+            letter.append("My profile also reflects strengths in ")
                     .append(skills)
-                    .append(", and I would apply these capabilities directly to the duties described in the advertisement. ");
+                    .append(", which I would apply directly to the duties and standards of the post. ");
         }
-        letter.append("I have considered the vacancy requirements carefully and would approach the post with the discipline, accuracy, and accountability expected by ")
+        letter.append("I would approach the role with careful preparation, clear communication, and respect for the responsibilities entrusted to ")
                 .append(employer)
                 .append(".")
                 .append("\n\n");
@@ -1360,6 +1509,91 @@ public final class MainActivity extends Activity {
         }
 
         return letter.toString();
+    }
+
+    private String coverLetterJobTitle(Job job) {
+        String title = job.title == null || job.title.trim().isEmpty()
+                ? "advertised"
+                : job.title.trim();
+
+        title = title.replaceAll("(?i)\\s+ref(?:erence)?\\s*(?:no\\.?|number)?\\s*[:#-]?.*$", "");
+        title = title.replaceAll("(?i)\\s+directorate\\s*[:#-].*$", "");
+        title = title.replaceAll("\\s+", " ").trim();
+        title = title.replaceAll("[\\s:;,-]+$", "");
+
+        if (title.isEmpty()) {
+            return "advertised";
+        }
+
+        if (title.equals(title.toUpperCase(Locale.ROOT))) {
+            title = toReadableTitle(title);
+        }
+
+        return title;
+    }
+
+    private String toReadableTitle(String value) {
+        String[] parts = value.toLowerCase(Locale.ROOT).split("\\s+");
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < parts.length; index++) {
+            String part = parts[index];
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(" ");
+            }
+            if (index > 0 && isLowercaseTitleWord(part)) {
+                builder.append(part);
+            } else if (isLikelyAcronym(part)) {
+                builder.append(part.toUpperCase(Locale.ROOT));
+            } else {
+                builder.append(part.substring(0, 1).toUpperCase(Locale.ROOT)).append(part.substring(1));
+            }
+        }
+        return builder.toString();
+    }
+
+    private boolean isLowercaseTitleWord(String value) {
+        return "and".equals(value)
+                || "of".equals(value)
+                || "the".equals(value)
+                || "for".equals(value)
+                || "in".equals(value)
+                || "to".equals(value)
+                || "with".equals(value);
+    }
+
+    private boolean isLikelyAcronym(String value) {
+        return "it".equals(value)
+                || "ict".equals(value)
+                || "hr".equals(value)
+                || "ceo".equals(value)
+                || "cfo".equals(value)
+                || "m&e".equals(value);
+    }
+
+    private String advertNeedSentence(Job job) {
+        String text = normaliseSearchText(job.title + " " + job.description + " " + job.requirements);
+        if (text.contains("monitoring") || text.contains("evaluation") || text.contains("research")) {
+            return "analyse information carefully, prepare reliable reports, and support evidence-based decisions";
+        }
+        if (text.contains("customer") || text.contains("service") || text.contains("client")) {
+            return "serve clients professionally, handle information accurately, and resolve enquiries with patience and accountability";
+        }
+        if (text.contains("finance") || text.contains("risk") || text.contains("audit")) {
+            return "work with financial or risk information responsibly and maintain a disciplined approach to accuracy and compliance";
+        }
+        if (text.contains("driver") || text.contains("vehicle")) {
+            return "perform operational duties safely, follow instructions precisely, and maintain dependable service standards";
+        }
+        if (text.contains("agriculture")) {
+            return "combine technical knowledge, field awareness, and clear reporting to support agricultural service delivery";
+        }
+        if (isGovernmentMethod(job)) {
+            return "apply public-service procedures, communicate clearly, and produce accurate work that supports the department's mandate";
+        }
+        return "understand the requirements of the role, communicate clearly, and deliver work to a dependable professional standard";
     }
 
     private String evidenceSentence() {
@@ -1846,12 +2080,12 @@ public final class MainActivity extends Activity {
     }
 
     private void openEmailApplication(Job job, String emailBody, String coverLetter, String cvText) {
-        if (job.applicationEmail == null || job.applicationEmail.trim().isEmpty()) {
+        if (!hasApplicationEmail(job)) {
             showMissingApplicationContact(job);
             return;
         }
 
-        String subject = "Application: " + job.title + referenceSuffix(job);
+        String subject = "Application: " + coverLetterJobTitle(job) + referenceSuffix(job);
         String body = emailBody
                 + "\n\nLet’s Apply has prepared the supporting documents for review before sending.";
 
@@ -1936,7 +2170,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openWebsiteAfterDocumentPrompt(Job job, String cvText, String coverLetter, String applicationEmail) {
-        if (job.applicationUrl == null || job.applicationUrl.trim().isEmpty()) {
+        if (!hasApplicationUrl(job)) {
             showMissingApplicationContact(job);
             return;
         }
@@ -1957,11 +2191,12 @@ public final class MainActivity extends Activity {
     private String emailDraft(Job job) {
         String greeting = isGovernmentMethod(job) ? "Dear Selection Committee," : "Dear Hiring Manager,";
         String applicantName = getProfile("name", "");
+        String jobTitle = coverLetterJobTitle(job);
         StringBuilder draft = new StringBuilder();
         draft.append(greeting)
                 .append("\n\n")
                 .append("Please receive my application for the ")
-                .append(job.title)
+                .append(jobTitle)
                 .append(" position")
                 .append(referenceSuffix(job))
                 .append(". I have prepared my CV, cover letter, and the required supporting documents for your consideration. ")
@@ -1977,7 +2212,7 @@ public final class MainActivity extends Activity {
     }
 
     private void shareApplicationDocuments(Job job, String cvText, String coverLetter, String applicationEmail) {
-        String subject = "Application: " + job.title + referenceSuffix(job);
+        String subject = "Application: " + coverLetterJobTitle(job) + referenceSuffix(job);
         String text = fullApplicationText(job, cvText, coverLetter, applicationEmail);
 
         try {
@@ -1998,7 +2233,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openApplicationWebsite(Job job) {
-        if (job.applicationUrl == null || job.applicationUrl.trim().isEmpty()) {
+        if (!hasApplicationUrl(job)) {
             showMissingApplicationContact(job);
             return;
         }
@@ -2047,10 +2282,10 @@ public final class MainActivity extends Activity {
 
     private void addContactSection(Job job) {
         StringBuilder builder = new StringBuilder();
-        if (job.applicationEmail != null && !job.applicationEmail.trim().isEmpty()) {
+        if (hasApplicationEmail(job)) {
             builder.append("Email: ").append(job.applicationEmail.trim()).append("\n");
         }
-        if (job.applicationUrl != null && !job.applicationUrl.trim().isEmpty()) {
+        if (hasApplicationUrl(job)) {
             builder.append("Link: ").append(job.applicationUrl.trim()).append("\n");
         }
         if (job.referenceNumber != null && !job.referenceNumber.trim().isEmpty()) {
@@ -2169,17 +2404,46 @@ public final class MainActivity extends Activity {
     }
 
     private boolean isGovernmentMethod(Job job) {
-        return job.method != null && job.method.toLowerCase(Locale.ROOT).startsWith("government");
+        String method = safeLower(job.method);
+        String source = safeLower(job.source + " " + job.company);
+        return method.startsWith("government")
+                || source.contains("dpsa")
+                || source.contains("department of")
+                || source.contains("public service");
     }
 
     private boolean isEmailMethod(Job job) {
-        return "email".equals(job.method) || "governmentEmail".equals(job.method);
+        String method = safeLower(job.method);
+        if ("email".equals(method) || "governmentemail".equals(method)) {
+            return true;
+        }
+        return hasApplicationEmail(job) && !isExplicitWebsiteMethod(method);
     }
 
     private boolean isWebsiteMethod(Job job) {
-        return "externalWebsite".equals(job.method)
-                || "externalLink".equals(job.method)
-                || "governmentWebsite".equals(job.method);
+        String method = safeLower(job.method);
+        return isExplicitWebsiteMethod(method) || (hasApplicationUrl(job) && !isEmailMethod(job));
+    }
+
+    private boolean isExplicitWebsiteMethod(String method) {
+        return "externalwebsite".equals(method)
+                || "externallink".equals(method)
+                || "governmentwebsite".equals(method)
+                || "website".equals(method)
+                || method.contains("website")
+                || method.contains("portal");
+    }
+
+    private boolean hasApplicationEmail(Job job) {
+        return job.applicationEmail != null && !job.applicationEmail.trim().isEmpty();
+    }
+
+    private boolean hasApplicationUrl(Job job) {
+        return job.applicationUrl != null && !job.applicationUrl.trim().isEmpty();
+    }
+
+    private String safeLower(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
     }
 
     private String referenceSuffix(Job job) {
