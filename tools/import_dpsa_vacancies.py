@@ -9,7 +9,11 @@ import html
 import json
 import os
 import re
+import socket
+import ssl
+import time
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -17,12 +21,15 @@ from pathlib import Path
 
 
 DPSA_NEWSROOM_URL = "https://www.dpsa.gov.za/newsroom/"
+DPSA_PSV_URL = "https://www.dpsa.gov.za/newsroom/psvc/"
+DISCOVERY_URLS = (DPSA_NEWSROOM_URL, DPSA_PSV_URL)
+RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 OFFICIAL_PDF_PATTERN = re.compile(
     r"""href=["']([^"']*PSV(?:%20|\s)*CIRCULAR(?:%20|\s)*\d+(?:%20|\s)*of(?:%20|\s)*\d+\.pdf)["']""",
     re.IGNORECASE,
 )
 CIRCULAR_PAGE_PATTERN = re.compile(
-    r"""href=["']([^"']*/newsroom/psvc/circular-(\d+)-of-(\d{4})/?)["']""",
+    r"""href=["']([^"']*(?:/newsroom/psvc/)?circular-(\d+)-of-(\d{4})/?)["']""",
     re.IGNORECASE,
 )
 POST_PATTERN = re.compile(
@@ -58,20 +65,39 @@ NUMBER_WORDS = {
 }
 
 
-def fetch_url(url: str) -> bytes:
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "LetsApplyVacancyImporter/1.0"},
-    )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+def fetch_url(url: str, attempts: int = 4) -> bytes:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (compatible; LetsApplyVacancyImporter/1.0; "
+            "+https://github.com/RSKuse/letsApply-2.0)"
+        ),
+        "Accept": "text/html,application/pdf,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-ZA,en;q=0.9",
+        "Connection": "close",
+    }
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRYABLE_HTTP_CODES:
+                raise
+            last_error = error
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ssl.SSLError) as error:
+            last_error = error
+
+        if attempt < attempts:
+            time.sleep(min(2 ** (attempt - 1), 8))
+
+    raise RuntimeError(f"Unable to fetch {url} after {attempts} attempts: {last_error}") from last_error
 
 
-def discover_latest_pdf() -> str:
-    page = fetch_url(DPSA_NEWSROOM_URL).decode("utf-8", errors="replace")
+def latest_direct_pdf_from_page(page: str, base_url: str) -> str:
     candidates = []
     for raw_url in OFFICIAL_PDF_PATTERN.findall(page):
-        url = urllib.parse.urljoin(DPSA_NEWSROOM_URL, html.unescape(raw_url))
+        url = urllib.parse.urljoin(base_url, html.unescape(raw_url))
         decoded_url = urllib.parse.unquote(url)
         match = re.search(
             r"CIRCULAR\s*0*(\d+)\s*of\s*(\d{4})",
@@ -81,30 +107,59 @@ def discover_latest_pdf() -> str:
         if match:
             candidates.append((int(match.group(2)), int(match.group(1)), url))
 
-    if candidates:
-        return max(candidates, key=lambda value: (value[0], value[1]))[2]
+    return max(candidates, key=lambda value: (value[0], value[1]))[2] if candidates else ""
 
+
+def circular_pages_from_page(page: str, base_url: str) -> list[tuple[int, int, str]]:
     circular_pages = []
     for raw_url, number, year in CIRCULAR_PAGE_PATTERN.findall(page):
         circular_pages.append(
-            (int(year), int(number), urllib.parse.urljoin(DPSA_NEWSROOM_URL, raw_url))
+            (int(year), int(number), urllib.parse.urljoin(base_url, html.unescape(raw_url)))
         )
+    return circular_pages
 
-    if not circular_pages:
-        raise RuntimeError("No official DPSA circular page was found on the newsroom page.")
 
-    _, _, circular_page_url = max(circular_pages)
-    circular_page = fetch_url(circular_page_url).decode("utf-8", errors="replace")
+def full_circular_pdf_from_page(page: str, base_url: str) -> str:
     pdf_candidates = []
-    for raw_url in re.findall(r"""href=["']([^"']+\.pdf)["']""", circular_page, re.IGNORECASE):
-        url = urllib.parse.urljoin(circular_page_url, html.unescape(raw_url))
-        if "psv%20circular" in url.lower() or "psv circular" in urllib.parse.unquote(url).lower():
+    for raw_url in re.findall(r"""href=["']([^"']+\.pdf)["']""", page, re.IGNORECASE):
+        url = urllib.parse.urljoin(base_url, html.unescape(raw_url))
+        decoded_url = urllib.parse.unquote(url).lower()
+        if "psv circular" in decoded_url or "psvc" in decoded_url:
             pdf_candidates.append(url)
+    return pdf_candidates[0] if pdf_candidates else ""
 
-    if not pdf_candidates:
-        raise RuntimeError("The latest DPSA circular page did not contain a full circular PDF.")
 
-    return pdf_candidates[0]
+def resolve_circular_pdf_url(url: str) -> str:
+    if urllib.parse.urlparse(url).path.lower().endswith(".pdf"):
+        return url
+
+    page = fetch_url(url).decode("utf-8", errors="replace")
+    pdf_url = latest_direct_pdf_from_page(page, url) or full_circular_pdf_from_page(page, url)
+    if not pdf_url:
+        raise RuntimeError(f"No official DPSA circular PDF was found at {url}.")
+    return pdf_url
+
+
+def discover_latest_pdf() -> str:
+    errors = []
+    for index_url in DISCOVERY_URLS:
+        try:
+            page = fetch_url(index_url).decode("utf-8", errors="replace")
+            direct_pdf = latest_direct_pdf_from_page(page, index_url)
+            if direct_pdf:
+                return direct_pdf
+
+            circular_pages = sorted(circular_pages_from_page(page, index_url), reverse=True)
+            for _, _, circular_page_url in circular_pages:
+                try:
+                    return resolve_circular_pdf_url(circular_page_url)
+                except Exception as error:  # Keep checking older pages if one page is malformed.
+                    errors.append(f"{circular_page_url}: {error}")
+        except Exception as error:
+            errors.append(f"{index_url}: {error}")
+
+    details = " | ".join(errors) if errors else "No candidate circular pages were found."
+    raise RuntimeError(f"No official DPSA circular PDF could be discovered. {details}")
 
 
 def extract_pdf_text(pdf_path: Path) -> str:
@@ -567,7 +622,7 @@ def main() -> None:
     pdf_path = args.pdf
 
     if pdf_path is None:
-        source_url = source_url or discover_latest_pdf()
+        source_url = resolve_circular_pdf_url(source_url) if source_url else discover_latest_pdf()
         temporary = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         temporary.write(fetch_url(source_url))
         temporary.close()
