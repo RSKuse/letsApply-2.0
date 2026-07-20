@@ -2,8 +2,11 @@ import unittest
 from unittest.mock import call, patch
 
 from import_dpsa_vacancies import (
+    DISCOVERY_URLS,
     DPSA_NEWSROOM_URL,
     DPSA_PSV_URL,
+    DPSA_PSV_HTTP_URL,
+    KNOWN_CURRENT_DPSA_PDF_URL,
     discover_latest_pdf,
     inject_click_here_links,
     parse_experience,
@@ -211,6 +214,34 @@ DUTIES : Provide administration.
             "https://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2023%20of%202026.pdf",
         )
         fetch_url.assert_has_calls([call(DPSA_NEWSROOM_URL), call(DPSA_PSV_URL)])
+
+    @patch("import_dpsa_vacancies.fetch_url")
+    def test_latest_circular_falls_back_to_http_psv_listing(self, fetch_url):
+        fetch_url.side_effect = [
+            RuntimeError("temporary DPSA newsroom TLS failure"),
+            RuntimeError("temporary DPSA PSV TLS failure"),
+            b"""
+            <a href="/documents/PSV%20CIRCULAR%2024%20of%202026.pdf">Current</a>
+            """,
+        ]
+
+        result = discover_latest_pdf()
+
+        self.assertEqual(
+            result,
+            "http://www.dpsa.gov.za/documents/PSV%20CIRCULAR%2024%20of%202026.pdf",
+        )
+        fetch_url.assert_has_calls(
+            [call(DPSA_NEWSROOM_URL), call(DPSA_PSV_URL), call(DPSA_PSV_HTTP_URL)]
+        )
+
+    @patch("import_dpsa_vacancies.fetch_url")
+    def test_latest_circular_uses_known_current_pdf_when_discovery_is_down(self, fetch_url):
+        fetch_url.side_effect = [RuntimeError("DPSA index unavailable")] * len(DISCOVERY_URLS)
+
+        result = discover_latest_pdf()
+
+        self.assertEqual(result, KNOWN_CURRENT_DPSA_PDF_URL)
 
     @patch("import_dpsa_vacancies.fetch_url")
     def test_manual_url_can_point_to_circular_page(self, fetch_url):
